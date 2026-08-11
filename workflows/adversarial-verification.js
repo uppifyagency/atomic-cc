@@ -35,12 +35,17 @@ if (!A.task) throw new Error('atomic: task required')
 const N = Math.min(Math.max(A.verifier_count ?? 3, 1), 5)   // Atomic default 3
 const MAX_REPAIRS = Math.min(Math.max(A.max_repairs ?? 2, 0), 5) // Atomic default 2
 const CAND = `.atomic-cc/runs/${A.run_id}/candidate.md`
+// User-supplied criteria (CC extension over upstream, which has task-only input):
+// folded verbatim into the verification rubric so they gate exactly like the
+// built-in checks. Kept immutable for the whole run.
+const CRITERIA = Array.isArray(A.criteria) ? A.criteria.map(String).filter(Boolean) : []
 const RUBRIC = [
   'The candidate satisfies the literal task.',
   'Important claims cite observable evidence.',
   'Relevant validation is executed and reported with commands run and observed output.',
   'File findings cite file:line evidence where applicable.',
   'No blocking correctness, safety, or completeness gap remains.',
+  ...CRITERIA.map(c => `Acceptance criterion (user-supplied, immutable): ${c}`),
 ]
 
 const VERIFIER_SCHEMA = {

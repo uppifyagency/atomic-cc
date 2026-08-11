@@ -1,0 +1,7 @@
+{
+  "upstream": "bastani-inc/atomic",
+  "sha": "9c8b6d8fbefcff3408255ca60b890048da5f0184",
+  "synced_at": "2026-08-11",
+  "upstream_release": "0.9.13-alpha.1",
+  "notes": "Parity baseline: all 9 upstream builtin workflows ported (goal, ralph, adversarial-verification, fan-out-and-synthesize, classify-and-act, generate-and-filter, tournament, loop-until-done, open-claude-design headless). Runtime-level features (sessions, compaction, intercom, TUI, providers) are provided by Claude Code itself — see README."
+}

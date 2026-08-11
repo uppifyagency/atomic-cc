@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>atomic-cc — verified agent workflows in Claude Code</title>
-<meta name="description" content="A Claude Code plugin: four verification workflows, ten subagents and three hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), ten subagents and four hooks that gate every commit behind deterministic, evidence-backed approval.">
 <link rel="canonical" href="https://atomic-cc.vercel.app/">
 <meta name="author" content="Vlad Vrinceanu">
 <meta name="color-scheme" content="light dark">
@@ -14,16 +14,16 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="atomic-cc">
 <meta property="og:title" content="atomic-cc — verified agent workflows in Claude Code">
-<meta property="og:description" content="A Claude Code plugin: four verification workflows, ten subagents and three hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta property="og:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), ten subagents and four hooks that gate every commit behind deterministic, evidence-backed approval.">
 <meta property="og:url" content="https://atomic-cc.vercel.app/">
 <meta property="og:image" content="https://atomic-cc.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Four workflows, ten subagents, four slash commands, three hooks.">
+<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Nine workflows, ten subagents, five slash commands, four hooks.">
 <meta property="og:locale" content="en_GB">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="atomic-cc — verified agent workflows in Claude Code">
-<meta name="twitter:description" content="A Claude Code plugin: four verification workflows, ten subagents and three hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="twitter:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), ten subagents and four hooks that gate every commit behind deterministic, evidence-backed approval.">
 <meta name="twitter:image" content="https://atomic-cc.vercel.app/og.png">
 <meta name="twitter:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code.">
 
@@ -37,7 +37,7 @@
   "@type": "SoftwareSourceCode",
   "name": "atomic-cc",
   "alternateName": "atomic (Claude Code plugin)",
-  "description": "A Claude Code plugin providing four verification workflows, ten subagents, four slash commands and three enforcement hooks. Approval is decided by a deterministic quorum reducer outside the model, and git commits are gated until that approval is sealed.",
+  "description": "A Claude Code plugin providing nine verification workflows, ten subagents, five slash commands and four hooks. Approval is decided by a deterministic quorum reducer outside the model, and git commits are gated until that approval is sealed.",
   "url": "https://atomic-cc.vercel.app/",
   "codeRepository": "https://github.com/uppifyagency/atomic-cc",
   "license": "https://opensource.org/licenses/MIT",
@@ -45,7 +45,7 @@
   "runtimePlatform": "Claude Code",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "macOS, Linux",
-  "softwareVersion": "0.1.0",
+  "softwareVersion": "0.2.0",
   "keywords": "claude code plugin, agentic workflows, ai code review, adversarial verification, deterministic reducer, commit gate",
   "author": {
     "@type": "Person",
@@ -415,7 +415,7 @@ html{scroll-behavior:smooth}
 
 <header class="masthead">
   <div class="shell">
-    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.1.0</span></a>
+    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.2.0</span></a>
     <nav aria-label="Sections">
       <ul>
         <li><a href="#workflows">Workflows</a></li>
@@ -437,7 +437,7 @@ html{scroll-behavior:smooth}
   <div class="shell">
     <p class="eyebrow tag">
       <span>Claude Code plugin</span><span class="sep" aria-hidden="true">/</span>
-      <span>v0.1.0</span><span class="sep" aria-hidden="true">/</span>
+      <span>v0.2.0</span><span class="sep" aria-hidden="true">/</span>
       <span>MIT</span><span class="sep" aria-hidden="true">/</span>
       <span>independent port of Atomic</span>
     </p>
@@ -447,8 +447,8 @@ html{scroll-behavior:smooth}
     <p class="lede">
       atomic-cc is <b>a plugin, and only a plugin</b>. There is no separate CLI to learn, no daemon
       to keep alive, no service to sign up for and no API key of its own. You install it into the
-      Claude Code session you already use, and four workflows, ten subagents, four slash commands
-      and three enforcement hooks appear at the prompt.
+      Claude Code session you already use, and nine workflows, ten subagents, five slash commands
+      and four hooks appear at the prompt.
     </p>
 
     <div class="hero-actions">
@@ -713,7 +713,7 @@ html{scroll-behavior:smooth}
         </figcaption>
       </figure>
 
-      <h3>Three hooks hold the line</h3>
+      <h3>Four hooks hold the line</h3>
       <div class="ledger">
         <div class="row">
           <div class="k">Evidence logger<span class="sub">PostToolUse · Bash</span></div>
@@ -735,8 +735,16 @@ html{scroll-behavior:smooth}
           <code>in_progress</code>: the run has to be driven to a terminal state first. Bounded to
           three blocks per run, so it can never trap a session.</p></div>
         </div>
+        <div class="row">
+          <div class="k">Upstream watch<span class="sub">SessionStart · startup</span></div>
+          <div class="d"><p>At most once a day, compares the HEAD of
+          <code>bastani-inc/atomic</code> against the commit recorded in
+          <code>upstream.lock</code>. On drift it asks the session to suggest
+          <code>/atomic:sync-upstream</code>, which reviews the upstream changes and updates the
+          port. Fails open: no network, no git, no lock file — no noise.</p></div>
+        </div>
       </div>
-      <p class="note warn"><span class="tag">Honest caveat</span>All three hooks need <code>jq</code>
+      <p class="note warn"><span class="tag">Honest caveat</span>The enforcement hooks need <code>jq</code>
       on <code>PATH</code> and fail open without it — no <code>jq</code>, no gate. It is a declared
       trade-off, not an accident, and it is why <code>jq</code> is listed as a prerequisite.</p>
     </div>
@@ -873,7 +881,7 @@ approval.json first. Check /atomic:status.</code></pre>
       <div class="measure">
         <p>
           A verification tool that oversells itself is worse than none, so: atomic-cc is version
-          <strong>0.1.0</strong>. The convergence rules are ported carefully and the hooks do what
+          <strong>0.2.0</strong>. The convergence rules are ported carefully and the hooks do what
           this page says they do, but the project is new and has not been through many hands.
         </p>
       </div>
@@ -947,7 +955,7 @@ approval.json first. Check /atomic:status.</code></pre>
       <div class="colophon">
         <span>Set in Newsreader &amp; IBM Plex Mono (SIL OFL)</span>
         <span><a href="https://github.com/uppifyagency/atomic-cc">github.com/uppifyagency/atomic-cc</a></span>
-        <span>v0.1.0</span>
+        <span>v0.2.0</span>
       </div>
     </div>
   </div>

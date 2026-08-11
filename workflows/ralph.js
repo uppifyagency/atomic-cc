@@ -11,8 +11,8 @@ export const meta = {
   ],
 }
 
-// args: { run_id, prompt, criteria = [], max_loops = 10, verifier_count = 3,
-//         base_branch = 'origin/main', create_pr = false }
+// args: { run_id, prompt, criteria = [] (alias: acceptance_criteria), max_loops = 10,
+//         verifier_count = 3, base_branch = 'origin/main', create_pr = false }
 // Slash-command invocation delivers everything after the command name as a
 // STRING, so accept a JSON string (optionally followed by prose) too.
 function atomicArgs(raw) {
@@ -27,6 +27,9 @@ function atomicArgs(raw) {
     '/atomic:ralph {"run_id":"r-1","prompt":"..."}')
 }
 const A = atomicArgs(args)
+// Upstream input name is acceptance_criteria; accept it as an alias of criteria.
+if ((!Array.isArray(A.criteria) || !A.criteria.length) && Array.isArray(A.acceptance_criteria))
+  A.criteria = A.acceptance_criteria
 if (!A.run_id) throw new Error('atomic: run_id required')
 if (!/^[A-Za-z0-9._-]{1,64}$/.test(A.run_id))
   throw new Error('atomic: run_id must match [A-Za-z0-9._-], max 64 chars (no slashes, spaces, or quotes)')

@@ -8,8 +8,8 @@ export const meta = {
   ],
 }
 
-// args: { run_id, objective, criteria = [], max_turns = 10, verifier_count = 3,
-//         review_quorum = 2, base_branch = 'origin/main', create_pr = false }
+// args: { run_id, objective, criteria = [] (alias: acceptance_criteria), max_turns = 10,
+//         verifier_count = 3, review_quorum = 2, base_branch = 'origin/main', create_pr = false }
 // Slash-command invocation delivers everything after the command name as a
 // STRING, so accept a JSON string (optionally followed by prose) too.
 function atomicArgs(raw) {
@@ -28,8 +28,12 @@ if (!A.run_id) throw new Error('atomic: run_id required')
 if (!/^[A-Za-z0-9._-]{1,64}$/.test(A.run_id))
   throw new Error('atomic: run_id must match [A-Za-z0-9._-], max 64 chars (no slashes, spaces, or quotes)')
 if (!A.objective) throw new Error('atomic: objective required')
-const CRITERIA = Array.isArray(A.criteria) && A.criteria.length
-  ? A.criteria
+// Upstream input name is acceptance_criteria; accept it as an alias of criteria.
+const RAW_CRITERIA = Array.isArray(A.criteria) && A.criteria.length ? A.criteria
+  : Array.isArray(A.acceptance_criteria) && A.acceptance_criteria.length ? A.acceptance_criteria
+  : []
+const CRITERIA = RAW_CRITERIA.length
+  ? RAW_CRITERIA
   : [`The objective is fully achieved as stated: ${A.objective}`]
 const MAX_TURNS = Math.min(Math.max(A.max_turns ?? 10, 1), 30)
 const N = Math.min(Math.max(A.verifier_count ?? 3, 1), 5)

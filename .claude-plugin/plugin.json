@@ -1,10 +1,10 @@
 {
   "name": "atomic",
   "description": "Port of Atomic (bastani-inc) verifiable agent workflows: schema-validated stages, fresh-context adversarial verification, deterministic reducers, evidence logs, commit gates.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Vlad Vrinceanu"
   },
-  "homepage": "https://github.com/bastani-inc/atomic",
+  "homepage": "https://uppifyagency.github.io/atomic-cc/",
   "license": "MIT"
 }

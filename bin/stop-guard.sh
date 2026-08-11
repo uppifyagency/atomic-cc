@@ -2,7 +2,7 @@
 # atomic-cc stop guard (Stop hook).
 # If an atomic run is in_progress in this project, blocks the turn from ending
 # with {"decision": "block", "reason": ...} so the run gets driven to a terminal
-# state (complete | needs_human | incomplete) instead of silently abandoned.
+# state (complete | blocked | needs_human | rejected | failed) instead of silently abandoned.
 # Triple anti-loop protection:
 #   1. respects stop_hook_active (never re-blocks while already continuing);
 #   2. own counter in CLAUDE_PLUGIN_DATA, max 3 blocks per run;
@@ -38,5 +38,5 @@ fi
 echo $((COUNT + 1)) > "$COUNT_FILE"
 
 jq -n --arg run "$RUN" '{decision: "block",
-  reason: ("atomic-cc: run \"" + $run + "\" is still in_progress - drive it to a terminal state (complete | needs_human | incomplete) and update .atomic-cc/run-state.json before ending the turn. If genuinely blocked on the user, set status to needs_human.")}'
+  reason: ("atomic-cc: run \"" + $run + "\" is still in_progress - drive it to a terminal state (complete | blocked | needs_human | rejected | failed) and update .atomic-cc/run-state.json before ending the turn. If genuinely blocked on the user, set status to needs_human.")}'
 exit 0

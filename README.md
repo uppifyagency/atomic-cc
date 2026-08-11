@@ -1,14 +1,14 @@
 # atomic-cc
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-1d1c18)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-b8431f)](.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-0.2.0-b8431f)](.claude-plugin/plugin.json)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-%E2%89%A5%202.1.154-1d1c18)](https://docs.claude.com/en/docs/claude-code)
 [![Landing page](https://img.shields.io/badge/docs-landing%20page-b8431f)](https://uppifyagency.github.io/atomic-cc/)
 
 **A verification harness that runs inside Claude Code — as a plugin, and nothing else.** There is no
 separate CLI to learn, no daemon to keep alive, no service to sign up for and no API key of its own.
-You install it into the Claude Code session you already use, and four workflows, ten subagents, four
-slash commands and three enforcement hooks appear at the prompt. Approval is decided by a
+You install it into the Claude Code session you already use, and nine workflows (all of Atomic's
+builtins), ten subagents, five slash commands and four hooks appear at the prompt. Approval is decided by a
 deterministic reducer that lives outside the model, and `git commit` stays denied until that
 approval is sealed.
 
@@ -27,11 +27,17 @@ Port of [Atomic](https://github.com/bastani-inc/atomic) (bastani-inc, MIT) into 
 | `/atomic:goal` | bounded implementation loop with ledger, immutable acceptance criteria, 2-of-3 reviewer quorum, blocker-threshold anti-loop, optional PR |
 | `/atomic:ralph` | refine → parallel codebase research → implement → unanimous review gate → bounded repair → optional PR |
 | `/atomic:fan-out-synthesize` | partition → bounded parallel branches (max_concurrency) → evidence synthesis barrier |
+| `/atomic:classify-and-act` | classifier with confidence threshold → deterministic route → isolated action (below threshold → `needs_human`; upstream's human gate can't run mid-workflow in CC) |
+| `/atomic:generate-and-filter` | N independent candidates → dedup + rubric filter → optional fresh judge → ranked shortlist |
+| `/atomic:tournament` | independent whole-task attempts → balanced single-elimination judging bracket (byes, walkovers) → auditable winner + bracket.json |
+| `/atomic:loop-until-done` | bounded iterate-and-evaluate loop with durable ledger; completion only on explicit evidence, exhaustion → `failed` |
+| `/atomic:open-claude-design` | design brief → online reference discovery → self-contained HTML preview → bounded critic refinements → HTML handoff spec (upstream's headless variant: the live playwright/feedback gate has no CC equivalent) |
 | subagents | worker, debugger, code-simplifier + 6 read-only research agents = the **9 subagents ported from Atomic**, plus 1 CC-specific `verifier` (Atomic runs verifiers as fresh-context workflow stages, not a named subagent; CC needs a named `agentType`) |
 | Evidence logger (hook) | every build/test/typecheck Bash call from ANY agent logged with real stdout/stderr to `.atomic-cc/evidence/` |
 | Approval gate (hook) | `git commit` / `git push` denied while a run is active and unapproved |
 | Stop guard (hook) | turns can't silently end with a run `in_progress` (bounded, anti-loop) |
 | `/atomic:status` `/atomic:approve` `/atomic:resume` `/atomic:rigor` | run inspection, human approval override, cross-session re-entry, rigor profiles |
+| Upstream watch (hook) + `/atomic:sync-upstream` | SessionStart hook checks `bastani-inc/atomic` HEAD against `upstream.lock` (max once/24h, fail-open); on drift the skill reviews upstream commits and updates the port |
 
 ## Requirements
 
@@ -82,7 +88,7 @@ Run state lives in your project:
 
 ```
 .atomic-cc/
-├── run-state.json          # {"active_run": "...", "status": "in_progress|complete|needs_human|incomplete"}
+├── run-state.json          # {"active_run": "...", "status": "in_progress|complete|blocked|needs_human|rejected|failed"}
 ├── evidence/<session>.jsonl# real command logs written by the PostToolUse hook
 └── runs/<run_id>/
     ├── receipt-*.json      # worker receipts {turn, stage, artifact_path, summary}
@@ -97,7 +103,9 @@ Add `.atomic-cc/` to `.gitignore` unless you want run history in the repo.
 
 The enforcement is deterministic and lives OUTSIDE the model. Convergence is ported faithfully from Atomic (`goal-reducer.ts`, `ralph-review-gate.ts`): the reviewer's `stop_review_loop` boolean is the single authoritative approval signal, and the reducer completes on a **quorum** of approving reviewers (goal: 2 of 3; ralph and adversarial: unanimous) — it never recomputes approval from findings/traceability, which Atomic deleted because it deadlocked runs whose criteria referenced the review process itself. The finding-blocking rules (`isBlocking`, ported bit-for-bit from `review-convergence.ts`) build the **repair payload** handed to the next worker turn, not the gate. goal adds Atomic's blocker-threshold anti-loop (same blocker 3 turns → `blocked`) and its status set (`complete`/`blocked`/`needs_human`). A `reviewer_error` does not approve but never aborts the run. adversarial-verification uses Atomic's lean pass/fail verifier + fresh-context LLM reducer with a deterministic unanimity override. Schemas validate verifier output; hooks block unapproved commits and silent abandonment.
 
-What it cannot do: prevent a model from reasoning badly — it can only prevent bad reasoning from becoming an unverified commit. Known gaps vs upstream Atomic (all deliberate CC adaptations): no `context:"fork"` stages; workflow resume with cached results is same-session only (cross-session re-entry goes through `/atomic:resume` + persisted artifacts); no mid-run human prompts (use `/atomic:approve` and phase-splitting instead); Atomic's file-based `ctx.task` artifact plumbing (`reads`/`output`) is emulated by having agents read/write project files under `.atomic-cc/`.
+What it cannot do: prevent a model from reasoning badly — it can only prevent bad reasoning from becoming an unverified commit. Known gaps vs upstream Atomic (all deliberate CC adaptations): no `context:"fork"` stages; workflow resume with cached results is same-session only (cross-session re-entry goes through `/atomic:resume` + persisted artifacts); no mid-run human prompts (classify-and-act persists `needs_human` instead of pausing; use `/atomic:approve` and phase-splitting elsewhere); Atomic's file-based `ctx.task` artifact plumbing (`reads`/`output`) is emulated by having agents read/write project files under `.atomic-cc/`; no `git_worktree_dir` input on goal/ralph (CC worktree isolation would split run artifacts from the hooks' project-cwd state); ralph's decorrelated reviewer model families (Anthropic + OpenAI) become N same-family fresh-context verifiers; `acceptance_criteria` is accepted as an alias of `criteria` on goal/ralph, and adversarial-verification folds user `criteria` into its rubric (a CC extension — upstream is task-only there).
+
+**Staying current with upstream:** the port records the upstream commit it was last synced against in `upstream.lock`. A SessionStart hook (`bin/check-upstream.sh`, at most one network check per 24h, fail-open) compares that SHA with `bastani-inc/atomic` HEAD and, on drift, tells the session to suggest `/atomic:sync-upstream` — a skill that reviews the upstream compare range, applies port-relevant behavior changes (workflows, agents, contracts), bumps the plugin version, and rewrites the lock.
 
 Two things to verify empirically on first run (undocumented API surface): whether `agentType` wants the namespaced name (`atomic:verifier`) or the bare one — the runtime error lists accepted names — and your plan's workflow availability.
 
