@@ -1,0 +1,40 @@
+atomic-cc
+Copyright (c) 2026 Vlad Vrinceanu
+Licensed under the MIT License (see LICENSE).
+
+--------------------------------------------------------------------------------
+Attribution
+--------------------------------------------------------------------------------
+
+atomic-cc is an INDEPENDENT port of concepts, contracts, and reducer rules from
+Atomic by Bastani:
+
+    https://github.com/bastani-inc/atomic   (MIT License)
+    https://docs.bastani.ai
+
+It bundles NO Atomic code. The convergence rules implemented here were
+re-derived from the published upstream sources — `review-convergence.ts`,
+`goal-reducer.ts`, `ralph-review-gate.ts`, `goal-schemas.ts`,
+`adversarial-verification-runner.ts` — and from the official documentation, then
+rewritten from scratch against Claude Code's own plugin primitives (dynamic
+workflows, subagents, skills, hooks).
+
+Full credit for the underlying design — the stop_review_loop approval contract,
+the quorum reducer, the finding-blocking classification, the blocker-threshold
+anti-loop, the pass/fail adversarial verifier with a fresh-context reducer — goes
+to the Atomic project and its authors.
+
+--------------------------------------------------------------------------------
+Not affiliated
+--------------------------------------------------------------------------------
+
+atomic-cc is NOT affiliated with, endorsed by, or supported by Bastani or by
+Anthropic. It is a third-party, community project.
+
+No Atomic logo, wordmark, brand colour, or marketing copy is used or reproduced
+in this project.
+
+"Claude" and "Claude Code" are trademarks of Anthropic. They are used here
+descriptively only, to say what this software is: a plugin for Claude Code.
+Use of those names does not imply any endorsement by, or affiliation with,
+Anthropic.

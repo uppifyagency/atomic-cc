@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atomic-cc — verified agent workflows in Claude Code</title>
+<meta name="description" content="atomic-cc is a Claude Code plugin: four verification workflows, ten subagents and three hooks that gate every commit behind deterministic, evidence-backed approval.">
+<link rel="canonical" href="https://uppifyagency.github.io/atomic-cc/">
+<meta name="author" content="Vlad Vrinceanu">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f1e9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="atomic-cc">
+<meta property="og:title" content="atomic-cc — verified agent workflows in Claude Code">
+<meta property="og:description" content="A Claude Code plugin: four verification workflows, ten subagents and three hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta property="og:url" content="https://uppifyagency.github.io/atomic-cc/">
+<meta property="og:image" content="https://uppifyagency.github.io/atomic-cc/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Four workflows, ten subagents, four slash commands, three hooks.">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="atomic-cc — verified agent workflows in Claude Code">
+<meta name="twitter:description" content="A Claude Code plugin: four verification workflows, ten subagents and three hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="twitter:image" content="https://uppifyagency.github.io/atomic-cc/og.png">
+<meta name="twitter:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code.">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23141412'/%3E%3Cpath d='M6 22h20M11 22V10h10v12' stroke='%23c1502e' stroke-width='2.5' fill='none'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/plex-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "atomic-cc",
+  "alternateName": "atomic (Claude Code plugin)",
+  "description": "A Claude Code plugin providing four verification workflows, ten subagents, four slash commands and three enforcement hooks. Approval is decided by a deterministic quorum reducer outside the model, and git commits are gated until that approval is sealed.",
+  "url": "https://uppifyagency.github.io/atomic-cc/",
+  "codeRepository": "https://github.com/uppifyagency/atomic-cc",
+  "license": "https://opensource.org/licenses/MIT",
+  "programmingLanguage": ["JavaScript", "Shell", "Markdown"],
+  "runtimePlatform": "Claude Code",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux",
+  "softwareVersion": "0.1.0",
+  "keywords": "claude code plugin, agentic workflows, ai code review, adversarial verification, deterministic reducer, commit gate",
+  "author": {
+    "@type": "Person",
+    "name": "Vlad Vrinceanu",
+    "url": "https://github.com/uppifyagency"
+  },
+  "maintainer": {
+    "@type": "Person",
+    "name": "Vlad Vrinceanu"
+  },
+  "isBasedOn": {
+    "@type": "SoftwareSourceCode",
+    "name": "Atomic",
+    "codeRepository": "https://github.com/bastani-inc/atomic",
+    "url": "https://docs.bastani.ai",
+    "license": "https://opensource.org/licenses/MIT"
+  },
+  "isAccessibleForFree": true,
+  "softwareRequirements": "Claude Code 2.1.154 or newer on a paid plan; jq on PATH"
+}
+</script>
+
+<style>
+/* ─── fonts ─────────────────────────────────────────────────────────────── */
+@font-face{
+  font-family:'Newsreader';
+  src:url('fonts/newsreader-latin.woff2') format('woff2');
+  font-weight:200 800; font-style:normal; font-display:swap;
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'IBM Plex Mono';
+  src:url('fonts/plex-mono-400-latin.woff2') format('woff2');
+  font-weight:400; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:'IBM Plex Mono';
+  src:url('fonts/plex-mono-500-latin.woff2') format('woff2');
+  font-weight:500; font-style:normal; font-display:swap;
+}
+
+/* ─── tokens: complete light palette on bare :root ──────────────────────── */
+:root{
+  --paper:#f4f1e9;
+  --paper-2:#efebe0;
+  --card:#faf8f2;
+  --ink:#171612;
+  --ink-2:#3c3931;
+  --muted:#6b6658;
+  --faint:#918b7b;
+  --rule:#d8d2c2;
+  --rule-strong:#bab3a0;
+  --accent:#b8431f;
+  --accent-soft:#f0dcd2;
+  --pass:#3f6b3f;
+  --pass-soft:#dde7d9;
+  --code-bg:#1d1c18;
+  --code-ink:#e8e3d6;
+  --code-dim:#928c7c;
+  --shadow:rgba(23,22,18,.09);
+  --grain:.05;
+
+  --serif:'Newsreader',ui-serif,'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,'DejaVu Sans Mono',monospace;
+
+  --measure:38rem;
+  --shell:72rem;
+  --gutter:clamp(1.25rem,5vw,4rem);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#141412;
+    --paper-2:#191917;
+    --card:#1c1c19;
+    --ink:#eae6da;
+    --ink-2:#c9c4b6;
+    --muted:#948e7f;
+    --faint:#6d6859;
+    --rule:#2d2c27;
+    --rule-strong:#403e36;
+    --accent:#e0714a;
+    --accent-soft:#38231b;
+    --pass:#86ad78;
+    --pass-soft:#20291d;
+    --code-bg:#0e0e0c;
+    --code-ink:#e2ddd0;
+    --code-dim:#7c7768;
+    --shadow:rgba(0,0,0,.4);
+    --grain:.035;
+  }
+}
+
+/* ─── base ──────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--serif);
+  font-size:clamp(1.0625rem,.98rem + .38vw,1.1875rem);
+  line-height:1.62;
+  font-optical-sizing:auto;
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+  overflow-wrap:break-word;
+}
+/* paper grain — static, decorative, behind everything */
+body::before{
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  opacity:var(--grain);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body>*{position:relative;z-index:1}
+
+h1,h2,h3{font-weight:520;line-height:1.12;letter-spacing:-.014em;margin:0}
+p{margin:0 0 1.05em}
+p:last-child{margin-bottom:0}
+a{color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:.17em;text-decoration-color:var(--rule-strong);transition:text-decoration-color .18s ease,color .18s ease}
+a:hover{text-decoration-color:var(--accent);color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:1px}
+::selection{background:var(--accent-soft);color:var(--ink)}
+hr{border:0;border-top:1px solid var(--rule);margin:0}
+ul{margin:0 0 1.05em;padding-left:1.15em}
+li{margin:.32em 0}
+li::marker{color:var(--faint)}
+strong{font-weight:620}
+code{font-family:var(--mono);font-size:.83em;letter-spacing:-.01em}
+abbr{text-decoration:none}
+
+.shell{max-width:var(--shell);margin-inline:auto;padding-inline:var(--gutter)}
+.measure{max-width:var(--measure)}
+.mono{font-family:var(--mono)}
+.tag{
+  font-family:var(--mono);font-size:.6875rem;font-weight:500;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+}
+.skip{
+  position:absolute;left:-9999px;top:0;background:var(--card);color:var(--ink);
+  padding:.6rem 1rem;border:1px solid var(--rule-strong);z-index:50;
+}
+.skip:focus{left:var(--gutter);top:.5rem}
+
+/* ─── masthead ──────────────────────────────────────────────────────────── */
+.masthead{
+  border-bottom:1px solid var(--rule);
+  background:color-mix(in srgb,var(--paper) 88%,transparent);
+  backdrop-filter:saturate(140%) blur(8px);
+  position:sticky;top:0;z-index:20;
+}
+.masthead .shell{display:flex;align-items:center;gap:1.5rem;min-height:3.25rem}
+.wordmark{
+  font-family:var(--mono);font-weight:500;font-size:.9375rem;letter-spacing:-.02em;
+  text-decoration:none;display:inline-flex;align-items:baseline;gap:.5rem;white-space:nowrap;
+}
+.wordmark:hover{color:inherit}
+.wordmark .dot{width:.44rem;height:.44rem;background:var(--accent);display:inline-block;transform:translateY(-.05rem)}
+.wordmark .v{color:var(--faint);font-size:.75rem}
+.masthead nav{margin-left:auto;overflow-x:auto;min-width:0;scrollbar-width:none}
+.masthead nav::-webkit-scrollbar{display:none}
+.masthead nav ul{display:flex;gap:1.35rem;list-style:none;margin:0;padding:0}
+.masthead nav a{
+  font-family:var(--mono);font-size:.75rem;letter-spacing:.03em;
+  text-decoration:none;color:var(--muted);white-space:nowrap;
+  padding:.25rem 0;border-bottom:1px solid transparent;
+}
+.masthead nav a:hover{color:var(--ink);border-bottom-color:var(--accent)}
+
+/* ─── hero ──────────────────────────────────────────────────────────────── */
+.hero{padding:clamp(3rem,9vw,6.5rem) 0 clamp(2.5rem,6vw,4rem);border-bottom:1px solid var(--rule)}
+.hero .eyebrow{display:flex;flex-wrap:wrap;gap:.5rem .9rem;align-items:center;margin-bottom:clamp(1.5rem,4vw,2.5rem)}
+.eyebrow .sep{color:var(--rule-strong)}
+.hero h1{
+  font-size:clamp(2.35rem,1.35rem + 4.4vw,4.6rem);
+  font-weight:400;letter-spacing:-.028em;line-height:1.03;
+  max-width:17ch;text-wrap:balance;
+}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.lede{
+  margin-top:clamp(1.4rem,3vw,2rem);
+  max-width:44rem;font-size:clamp(1.125rem,1.02rem + .42vw,1.3125rem);
+  color:var(--ink-2);line-height:1.55;
+}
+.lede b{color:var(--ink);font-weight:600}
+.hero-actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:2rem;align-items:center}
+.btn{
+  font-family:var(--mono);font-size:.8125rem;letter-spacing:.01em;
+  text-decoration:none;padding:.62rem 1.1rem;border:1px solid var(--ink);
+  background:var(--ink);color:var(--paper);display:inline-block;
+  transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease;
+}
+.btn:hover{background:var(--accent);border-color:var(--accent);color:#fff;transform:translateY(-1px)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--rule-strong)}
+.btn.ghost:hover{background:transparent;color:var(--accent);border-color:var(--accent)}
+
+/* spec sheet */
+.specsheet{
+  margin-top:clamp(2.5rem,6vw,3.75rem);
+  border-top:1px solid var(--rule-strong);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+}
+.specsheet div{
+  padding:1rem 1.1rem 1.1rem 0;border-bottom:1px solid var(--rule);
+}
+.specsheet dt{font-family:var(--mono);font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:.4rem}
+.specsheet dd{margin:0;font-size:1rem;color:var(--ink-2);line-height:1.35}
+.specsheet .n{font-size:1.75rem;font-weight:400;color:var(--ink);letter-spacing:-.02em;display:block;line-height:1}
+.specsheet .n span{font-size:.9rem;color:var(--muted);margin-left:.35rem;letter-spacing:0}
+
+/* ─── section scaffold: numbered spec clauses ───────────────────────────── */
+.clause{border-bottom:1px solid var(--rule);padding:clamp(2.75rem,7vw,4.75rem) 0}
+.clause>.shell{display:grid;grid-template-columns:9rem minmax(0,1fr);gap:0 clamp(1.5rem,4vw,3.5rem);align-items:start}
+.clause>.shell>*{min-width:0}
+.clause-mark{position:sticky;top:5rem}
+.clause-mark .num{
+  font-family:var(--mono);font-size:.75rem;font-weight:500;color:var(--accent);
+  letter-spacing:.08em;display:block;
+}
+.clause-mark .lbl{
+  font-family:var(--mono);font-size:.6875rem;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);display:block;margin-top:.45rem;line-height:1.5;
+}
+.clause h2{
+  font-size:clamp(1.6rem,1.25rem + 1.5vw,2.35rem);font-weight:420;
+  letter-spacing:-.022em;margin-bottom:1.4rem;max-width:22ch;text-wrap:balance;
+}
+.clause h3{
+  font-family:var(--mono);font-size:.8125rem;font-weight:500;letter-spacing:.02em;
+  text-transform:none;color:var(--ink);margin:2.25rem 0 .8rem;
+  padding-bottom:.45rem;border-bottom:1px solid var(--rule);
+}
+@media (max-width:53rem){
+  .clause>.shell{grid-template-columns:minmax(0,1fr)}
+  .clause-mark{position:static;display:flex;gap:.9rem;align-items:baseline;margin-bottom:1.1rem}
+  .clause-mark .lbl{margin-top:0}
+}
+
+/* ─── ledger (definition rows) ──────────────────────────────────────────── */
+.ledger{border-top:1px solid var(--rule-strong);margin:1.75rem 0 0}
+.ledger .row{
+  display:grid;grid-template-columns:minmax(11rem,15rem) minmax(0,1fr);
+  gap:.35rem clamp(1rem,3vw,2.25rem);
+  padding:1.05rem 0;border-bottom:1px solid var(--rule);
+}
+.ledger .row>.k{font-family:var(--mono);font-size:.8125rem;color:var(--ink);font-weight:500;line-height:1.5;word-break:break-word}
+.ledger .row>.k .sub{display:block;font-size:.6875rem;color:var(--faint);letter-spacing:.07em;text-transform:uppercase;margin-top:.35rem;font-weight:400}
+.ledger .row>.d{font-size:.9875rem;color:var(--ink-2);line-height:1.55}
+.ledger .row>.d p{margin-bottom:.5em}
+@media (max-width:36rem){.ledger .row{grid-template-columns:minmax(0,1fr)}}
+
+/* two-column contrast list */
+.duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:0;border-top:1px solid var(--rule-strong);margin-top:1.75rem}
+.duo section{padding:1.35rem 1.5rem 1.5rem 0;border-bottom:1px solid var(--rule);min-width:0}
+.duo section+section{border-left:1px solid var(--rule);padding-left:1.5rem}
+@media (max-width:33rem){.duo section+section{border-left:0;padding-left:0}}
+.duo h3{margin-top:0;border:0;padding:0;font-size:.75rem;letter-spacing:.11em;text-transform:uppercase}
+.duo ul{list-style:none;padding:0;margin:.9rem 0 0;font-size:.9375rem}
+.duo li{padding-left:1.5rem;position:relative;color:var(--ink-2);margin:.55em 0;line-height:1.5}
+.duo li::before{
+  position:absolute;left:0;top:0;font-family:var(--mono);font-size:.8125rem;
+}
+.yes li::before{content:"+";color:var(--pass)}
+.no li::before{content:"\2212";color:var(--accent)}
+
+/* ─── code ──────────────────────────────────────────────────────────────── */
+.code{
+  position:relative;background:var(--code-bg);color:var(--code-ink);
+  border:1px solid var(--rule);margin:1.5rem 0;
+}
+.code-head{
+  display:flex;align-items:center;gap:.75rem;
+  padding:.5rem .85rem;border-bottom:1px solid rgba(255,255,255,.09);
+  font-family:var(--mono);font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;color:var(--code-dim);
+}
+.code-head .grow{margin-left:auto}
+.code pre{
+  margin:0;padding:1rem .95rem 1.1rem;overflow-x:auto;
+  font-family:var(--mono);font-size:.8125rem;line-height:1.75;
+  -webkit-overflow-scrolling:touch;
+}
+.code pre code{font-size:inherit}
+.code .c{color:var(--code-dim)}
+.code .p{color:#d98b62}
+.code .s{color:#a9b98a}
+.code .k{color:#e8e3d6;font-weight:500}
+.copy{
+  font-family:var(--mono);font-size:.6875rem;letter-spacing:.06em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(255,255,255,.16);color:var(--code-dim);
+  padding:.2rem .5rem;cursor:pointer;transition:color .16s ease,border-color .16s ease;
+}
+.copy:hover{color:var(--code-ink);border-color:rgba(255,255,255,.4)}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ─── tables ────────────────────────────────────────────────────────────── */
+.scroller{overflow-x:auto;margin:1.75rem 0;-webkit-overflow-scrolling:touch;border-top:1px solid var(--rule-strong)}
+table{border-collapse:collapse;width:100%;min-width:34rem;font-size:.9375rem}
+th,td{text-align:left;padding:.8rem 1.1rem .8rem 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{
+  font-family:var(--mono);font-weight:500;font-size:.6875rem;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);padding-top:.7rem;padding-bottom:.7rem;
+}
+td.mono{font-family:var(--mono);font-size:.8125rem;color:var(--ink);white-space:nowrap}
+td{color:var(--ink-2)}
+
+/* ─── pull quote ────────────────────────────────────────────────────────── */
+.pull{
+  margin:2.5rem 0 .5rem;padding:0 0 0 1.5rem;border-left:2px solid var(--accent);
+  font-size:clamp(1.25rem,1.05rem + .8vw,1.6rem);line-height:1.32;letter-spacing:-.018em;
+  color:var(--ink);max-width:26ch;
+}
+
+/* ─── diagram ───────────────────────────────────────────────────────────── */
+figure{margin:2rem 0 0}
+figure svg{display:block;width:100%;height:auto;max-width:44rem}
+figcaption{font-family:var(--mono);font-size:.6875rem;color:var(--faint);letter-spacing:.03em;margin-top:.9rem;line-height:1.7;max-width:44rem}
+.d-rule{stroke:var(--rule-strong)}
+.d-box{fill:var(--card);stroke:var(--rule-strong)}
+.d-ink{fill:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:11px}
+.d-dim{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.06em}
+.d-accent{stroke:var(--accent)}
+.d-accent-f{fill:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:9.5px}
+.d-pass{stroke:var(--pass)}
+.d-pass-f{fill:var(--pass);font-family:'IBM Plex Mono',monospace;font-size:9.5px}
+
+/* ─── callout ───────────────────────────────────────────────────────────── */
+.note{
+  border-left:2px solid var(--rule-strong);padding:.15rem 0 .15rem 1.15rem;
+  margin:1.6rem 0;font-size:.9375rem;color:var(--muted);line-height:1.6;
+}
+.note.warn{border-left-color:var(--accent)}
+.note .tag{display:block;margin-bottom:.3rem}
+
+/* ─── footer ────────────────────────────────────────────────────────────── */
+footer{padding:clamp(2.75rem,7vw,4.5rem) 0 3.5rem;background:var(--paper-2)}
+footer .cols{display:grid;grid-template-columns:9rem minmax(0,1fr);gap:0 clamp(1.5rem,4vw,3.5rem)}
+footer .cols>*{min-width:0}
+@media (max-width:53rem){footer .cols{grid-template-columns:minmax(0,1fr)}}
+footer h2{font-family:var(--mono);font-size:.75rem;font-weight:500;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin-bottom:1.25rem}
+footer p{font-size:.9375rem;color:var(--muted);max-width:46rem;line-height:1.65}
+footer .disclaim{
+  margin-top:1.6rem;padding:1rem 1.15rem;border:1px solid var(--rule-strong);
+  background:var(--card);color:var(--ink-2);font-size:.9375rem;max-width:46rem;
+}
+footer .colophon{
+  margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--rule);
+  font-family:var(--mono);font-size:.6875rem;letter-spacing:.06em;color:var(--faint);
+  display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;
+}
+
+/* ─── motion ────────────────────────────────────────────────────────────── */
+@keyframes rise{from{opacity:0;transform:translateY(.6rem)}to{opacity:1;transform:none}}
+.hero .eyebrow,.hero h1,.hero .lede,.hero-actions,.specsheet{animation:rise .7s cubic-bezier(.2,.7,.3,1) both}
+.hero h1{animation-delay:.05s}
+.hero .lede{animation-delay:.13s}
+.hero-actions{animation-delay:.2s}
+.specsheet{animation-delay:.27s}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+html{scroll-behavior:smooth}
+:target{scroll-margin-top:5rem}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="shell">
+    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.1.0</span></a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#workflows">Workflows</a></li>
+        <li><a href="#gate">The gate</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#example">Example</a></li>
+        <li><a href="#limits">Limits</a></li>
+        <li><a href="https://github.com/uppifyagency/atomic-cc">GitHub&#8239;&#8599;</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div id="top"></div>
+
+<!-- ══ HERO ══════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="shell">
+    <p class="eyebrow tag">
+      <span>Claude Code plugin</span><span class="sep" aria-hidden="true">/</span>
+      <span>v0.1.0</span><span class="sep" aria-hidden="true">/</span>
+      <span>MIT</span><span class="sep" aria-hidden="true">/</span>
+      <span>independent port of Atomic</span>
+    </p>
+
+    <h1>A verification harness that lives <em>inside</em> Claude&nbsp;Code.</h1>
+
+    <p class="lede">
+      atomic-cc is <b>a plugin, and only a plugin</b>. There is no separate CLI to learn, no daemon
+      to keep alive, no service to sign up for and no API key of its own. You install it into the
+      Claude Code session you already use, and four workflows, ten subagents, four slash commands
+      and three enforcement hooks appear at the prompt.
+    </p>
+
+    <div class="hero-actions">
+      <a class="btn" href="#install">Install it</a>
+      <a class="btn ghost" href="https://github.com/uppifyagency/atomic-cc">Read the source on GitHub</a>
+    </div>
+
+    <dl class="specsheet">
+      <div><dt>Workflows</dt><dd><span class="n">4<span>slash-invoked</span></span></dd></div>
+      <div><dt>Subagents</dt><dd><span class="n">10<span>fresh context</span></span></dd></div>
+      <div><dt>Slash commands</dt><dd><span class="n">4<span>human control</span></span></dd></div>
+      <div><dt>Hooks</dt><dd><span class="n">3<span>outside the model</span></span></dd></div>
+      <div><dt>Requires</dt><dd>Claude&nbsp;Code&nbsp;≥&nbsp;2.1.154, paid plan, <code>jq</code></dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ══ 01 · NOT A PROGRAM ════════════════════════════════════════════════ -->
+<section class="clause" id="native">
+  <div class="shell">
+    <div class="clause-mark"><span class="num">§&#8239;01</span><span class="lbl">Nothing<br>to run</span></div>
+    <div>
+      <h2>It is a plugin, not a program you run alongside Claude Code.</h2>
+      <div class="measure">
+        <p>
+          Most tools that promise verified agent output ask you to adopt a second thing: their
+          binary, their orchestrator, their dashboard, their key. atomic-cc asks for none of that.
+          Its workflows execute in Claude Code's own dynamic-workflow runtime, its agents are Claude
+          Code subagents, its commands are Claude Code skills, and its enforcement is three POSIX
+          shell scripts that Claude Code invokes as hooks.
+        </p>
+        <p>
+          The practical consequence: the gate travels with the plugin. Install it at project scope
+          and the choice is recorded in the repository's own settings rather than your personal
+          ones — there is nothing to remember to start, and nothing to leave running.
+        </p>
+      </div>
+
+      <div class="duo">
+        <section class="yes">
+          <h3>What gets installed</h3>
+          <ul>
+            <li>Four workflow scripts, run by Claude Code's workflow runtime</li>
+            <li>Ten subagent definitions, each with its own tool allowlist</li>
+            <li>Four skills, exposed as <code>/atomic:*</code> slash commands</li>
+            <li>Three shell hooks wired to <code>PostToolUse</code>, <code>PreToolUse</code> and <code>Stop</code></li>
+            <li>A per-project <code>.atomic-cc/</code> directory of run state and evidence</li>
+          </ul>
+        </section>
+        <section class="no">
+          <h3>What does not</h3>
+          <ul>
+            <li>No CLI binary and no second command to learn</li>
+            <li>No daemon, watcher or background process</li>
+            <li>No hosted service, account or dashboard</li>
+            <li>No API keys, tokens or credentials of its own</li>
+            <li>No Node, Python or package installation step</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 02 · WORKFLOWS ════════════════════════════════════════════════════ -->
+<section class="clause" id="workflows">
+  <div class="shell">
+    <div class="clause-mark"><span class="num">§&#8239;02</span><span class="lbl">Four<br>workflows</span></div>
+    <div>
+      <h2>Four ways to make an agent prove its work.</h2>
+      <p class="measure">
+        Each workflow is invoked as a slash command and takes a single JSON object. A
+        <code>run_id</code> is required and must match <code>[A-Za-z0-9._-]</code>, at most
+        64&nbsp;characters — it becomes a directory name, and the scripts deliberately cannot
+        generate one for you, because a random id would break resume.
+      </p>
+
+      <div class="ledger">
+        <div class="row">
+          <div class="k">/atomic:goal<span class="sub">quorum 2 of 3</span></div>
+          <div class="d">
+            <p>A bounded implementation loop. Each turn a worker implements against acceptance
+            criteria that are restated verbatim and never reinterpreted, then three independent
+            reviewers inspect the real checkout delta in fresh context. Two approvals finish the
+            run. The same blocking finding surviving three consecutive turns marks the run
+            <code>blocked</code> instead of looping forever. Terminal states are
+            <code>complete</code>, <code>blocked</code> or <code>needs_human</code>; a pull request
+            is optional.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:ralph<span class="sub">unanimous</span></div>
+          <div class="d">
+            <p>The full pipeline for a rough prompt: refine it into a spec with testable acceptance
+            criteria, run three researchers in parallel over the codebase and the documentation,
+            implement, then hold a review gate that needs <em>every</em> reviewer to approve. Failed
+            gates produce a bounded repair loop that is handed only the blocking findings, so the
+            scope cannot drift.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:adversarial-verification<span class="sub">unanimity override</span></div>
+          <div class="d">
+            <p>The sharpest of the four. A worker writes a candidate record of what it did and what
+            it observed; N fresh-context verifiers return a bare <code>pass</code>/<code>fail</code>
+            with evidence, deriving their checks from a rubric before they are allowed to trust the
+            candidate; a separate fresh-context reducer decides accept, repair or reject. Its
+            "accept" only stands if every verifier passed — that last check is arithmetic, not
+            judgement.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:fan-out-synthesize<span class="sub">no gate</span></div>
+          <div class="d">
+            <p>Research, not enforcement. Partition a task into independent branches, run them in
+            batches bounded by <code>max_concurrency</code>, then hold a synthesis barrier that
+            reads every branch artifact together, resolves contradictions explicitly and flags
+            anything a branch claimed without evidence.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Ten subagents</h3>
+      <p class="measure">
+        Nine are ported from Atomic; the tenth, <code>verifier</code>, exists because Claude Code
+        needs a named agent type where Atomic runs verification as a fresh-context workflow stage.
+      </p>
+      <div class="scroller">
+        <table>
+          <thead>
+            <tr><th scope="col">Agent</th><th scope="col">Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">worker</td><td>The only agent that writes code in a run. Escalates product, architecture and scope decisions instead of taking them.</td></tr>
+            <tr><td class="mono">verifier</td><td>Derives probes from the literal criteria before reading any receipt, inspects the checkout itself, and reports only evidence-backed findings.</td></tr>
+            <tr><td class="mono">debugger</td><td>Reproduce, prove the root cause with file:line evidence, fix minimally, rerun the exact failing scenario.</td></tr>
+            <tr><td class="mono">code-simplifier</td><td>Behaviour-preserving cleanup of the diff only; a simplification that breaks a test is reverted, not patched around.</td></tr>
+            <tr><td class="mono">codebase-locator</td><td>Finds where things live. Read-only reconnaissance, no analysis.</td></tr>
+            <tr><td class="mono">codebase-analyzer</td><td>Explains how the located code actually works, tracing data flow with file:line references.</td></tr>
+            <tr><td class="mono">codebase-pattern-finder</td><td>Finds existing precedents to model new work on, and says which one wins when conventions conflict.</td></tr>
+            <tr><td class="mono">codebase-online-researcher</td><td>Primary-source research with a URL behind every claim; unsourced claims are dropped or marked unverified.</td></tr>
+            <tr><td class="mono">codebase-research-locator</td><td>Finds prior internal specs, ADRs and research documents relevant to the task.</td></tr>
+            <tr><td class="mono">codebase-research-analyzer</td><td>Turns those documents into constraints, marking each one applicable, stale or superseded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Only <code>worker</code>, <code>debugger</code> and <code>code-simplifier</code> can edit files. The six research agents never touch source; <code>codebase-online-researcher</code> may write research notes under <code>.atomic-cc/</code>, and that is all.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 03 · THE GATE ═════════════════════════════════════════════════════ -->
+<section class="clause" id="gate">
+  <div class="shell">
+    <div class="clause-mark"><span class="num">§&#8239;03</span><span class="lbl">Deterministic<br>convergence</span></div>
+    <div>
+      <h2>The decision to approve is arithmetic, and it happens outside the model.</h2>
+      <div class="measure">
+        <p>
+          Asking a model whether its own work is good enough is not verification. atomic-cc's
+          convergence rules are ported faithfully from Atomic's reducers, and they are built on one
+          idea: reviewers emit a single boolean, and code — not a model — decides what that boolean
+          means.
+        </p>
+      </div>
+
+      <div class="ledger">
+        <div class="row">
+          <div class="k">One authoritative signal</div>
+          <div class="d"><p>A reviewer's <code>stop_review_loop</code> boolean is the only thing that
+          can approve a run. Its output is schema-validated, so a reviewer cannot approve by writing
+          prose that sounds approving.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Approval is never recomputed</div>
+          <div class="d"><p>The reducer counts approving reviewers against a quorum and stops there.
+          It never re-derives approval from the findings or the traceability table — upstream deleted
+          that recompute because it deadlocked runs whose own criteria mentioned the review process.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Findings drive repair, not the gate</div>
+          <div class="d"><p>The blocking classification (<code>required_by_objective</code> always
+          blocks; <code>consistent_with_objective</code> blocks at priority 0–2; out-of-scope and
+          contradicting findings never block) builds the repair payload handed to the next worker
+          turn. It has no vote.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Failure never approves</div>
+          <div class="d"><p>A reviewer that reports a <code>reviewer_error</code> does not approve —
+          and does not abort the run either. Fewer reviewers returning than were requested is not
+          convergence: it is another loop.</p></div>
+        </div>
+      </div>
+
+      <blockquote class="pull">A model can reason badly. What it cannot do is turn bad reasoning into an unverified commit.</blockquote>
+
+      <h3>Quorum by workflow</h3>
+      <div class="scroller">
+        <table>
+          <thead>
+            <tr><th scope="col">Workflow</th><th scope="col">Approval rule</th><th scope="col">Bound</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">goal</td><td>2 of 3 reviewers approve (configurable, 1–5 reviewers)</td><td>10 turns by default, plus a 3-turn blocker threshold</td></tr>
+            <tr><td class="mono">ralph</td><td>Unanimous: every reviewer must approve</td><td>10 repair loops by default</td></tr>
+            <tr><td class="mono">adversarial-verification</td><td>Reducer says accept <em>and</em> all verifiers passed</td><td>2 repairs by default, then reject</td></tr>
+            <tr><td class="mono">fan-out-synthesize</td><td>No gate — a research workflow</td><td>4 branches, 4 concurrent, by default</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure>
+        <svg viewBox="0 0 720 250" role="img" aria-labelledby="diagram-title diagram-desc">
+          <title id="diagram-title">How an atomic-cc run reaches — or fails to reach — an approved commit</title>
+          <desc id="diagram-desc">A worker produces a change. Three fresh-context verifiers each return a stop_review_loop boolean. A deterministic reducer counts approvals against a quorum. If the quorum is met it writes approval.json and the PreToolUse hook allows a git commit. If not, the blocking findings are sent back to the worker as a repair payload, and the hook denies any commit attempt.</desc>
+          <g fill="none" stroke-width="1">
+            <!-- worker -->
+            <rect class="d-box" x="1" y="98" width="104" height="42"/>
+            <text class="d-ink" x="20" y="124">worker</text>
+
+            <!-- verifiers -->
+            <rect class="d-box" x="182" y="34" width="140" height="34"/>
+            <rect class="d-box" x="182" y="102" width="140" height="34"/>
+            <rect class="d-box" x="182" y="170" width="140" height="34"/>
+            <text class="d-ink" x="196" y="55">verifier · fresh</text>
+            <text class="d-ink" x="196" y="123">verifier · fresh</text>
+            <text class="d-ink" x="196" y="191">verifier · fresh</text>
+
+            <!-- reducer -->
+            <rect class="d-box" x="398" y="86" width="118" height="66"/>
+            <text class="d-ink" x="414" y="112">reducer</text>
+            <text class="d-dim" x="414" y="130">DETERMINISTIC</text>
+
+            <!-- outputs -->
+            <rect class="d-box" x="586" y="30" width="133" height="46"/>
+            <text class="d-ink" x="600" y="52">approval.json</text>
+            <text class="d-pass-f" x="600" y="66">COMMIT ALLOWED</text>
+
+            <rect class="d-box" x="586" y="162" width="133" height="46"/>
+            <text class="d-ink" x="600" y="184">repair payload</text>
+            <text class="d-accent-f" x="600" y="198">COMMIT DENIED</text>
+
+            <!-- edges -->
+            <path class="d-rule" d="M105 119 H150 M150 119 V51 H182 M150 119 H182 M150 119 V187 H182"/>
+            <path class="d-rule" d="M322 51 H360 V119 H398 M322 119 H398 M322 187 H360 V119"/>
+            <path class="d-pass" d="M516 110 H552 V53 H586"/>
+            <path class="d-accent" d="M516 128 H552 V185 H586"/>
+            <path class="d-accent" stroke-dasharray="3 3" d="M586 196 H540 V236 H53 V140"/>
+            <path class="d-pass" d="M580 47 l6 6 -6 6"/>
+            <path class="d-accent" d="M580 179 l6 6 -6 6"/>
+            <path class="d-rule" d="M392 113 l6 6 -6 6"/>
+          </g>
+          <text class="d-dim" x="336" y="42">stop_review_loop</text>
+          <text class="d-pass-f" x="524" y="102">quorum met</text>
+          <text class="d-accent-f" x="524" y="146">quorum missed</text>
+          <text class="d-accent-f" x="60" y="228">blocking findings only, no scope creep</text>
+        </svg>
+        <figcaption>
+          The loop for <code>/atomic:goal</code>. The reducer is the only automated path to
+          <code>approval.json</code>; the only other path is you, via <code>/atomic:approve</code>.
+          Nothing else opens the commit gate.
+        </figcaption>
+      </figure>
+
+      <h3>Three hooks hold the line</h3>
+      <div class="ledger">
+        <div class="row">
+          <div class="k">Evidence logger<span class="sub">PostToolUse · Bash</span></div>
+          <div class="d"><p>Every build, test and typecheck command run by <em>any</em> agent is
+          appended to <code>.atomic-cc/evidence/&lt;session&gt;.jsonl</code> with its real stdout and
+          stderr, and the agent that ran it. Verifiers cross-check claims against that log: a
+          "tests pass" with no matching entry is a finding, not a proof.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Approval gate<span class="sub">PreToolUse · Bash</span></div>
+          <div class="d"><p>While a run is active and unapproved, <code>git commit</code> and
+          <code>git push</code> are denied — including the wrapped forms agents reach for, such as
+          <code>cd&nbsp;pkg&nbsp;&amp;&amp;&nbsp;git&nbsp;commit</code> or
+          <code>git&nbsp;-C&nbsp;dir&nbsp;push</code>. With no active run it never interferes.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Stop guard<span class="sub">Stop</span></div>
+          <div class="d"><p>A turn cannot end quietly while <code>run-state.json</code> still says
+          <code>in_progress</code>: the run has to be driven to a terminal state first. Bounded to
+          three blocks per run, so it can never trap a session.</p></div>
+        </div>
+      </div>
+      <p class="note warn"><span class="tag">Honest caveat</span>All three hooks need <code>jq</code>
+      on <code>PATH</code> and fail open without it — no <code>jq</code>, no gate. It is a declared
+      trade-off, not an accident, and it is why <code>jq</code> is listed as a prerequisite.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 04 · INSTALL ══════════════════════════════════════════════════════ -->
+<section class="clause" id="install">
+  <div class="shell">
+    <div class="clause-mark"><span class="num">§&#8239;04</span><span class="lbl">Install</span></div>
+    <div>
+      <h2>Three commands, and it is in your session.</h2>
+      <p class="measure">
+        The repository is its own single-plugin marketplace, so a clone is all Claude Code needs.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>install</span><span class="grow"></span><button class="copy" type="button" data-copy="git clone https://github.com/uppifyagency/atomic-cc
+claude plugin marketplace add ./atomic-cc
+claude plugin install atomic@atomic-cc">Copy</button></div>
+<pre><code><span class="c"># 1 · clone the repository</span>
+<span class="k">git</span> clone https://github.com/uppifyagency/atomic-cc
+
+<span class="c"># 2 · register the clone as a marketplace</span>
+<span class="k">claude</span> plugin marketplace add ./atomic-cc
+
+<span class="c"># 3 · install the plugin from it</span>
+<span class="k">claude</span> plugin install atomic@atomic-cc</code></pre>
+      </div>
+
+      <p class="measure">
+        Add <code>--scope project</code> to either command to record the choice in the repository's
+        own settings instead of your personal ones. To try the plugin without registering anything
+        at all, point a single session at the directory:
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>try it once</span><span class="grow"></span><button class="copy" type="button" data-copy="claude --plugin-dir ./atomic-cc">Copy</button></div>
+<pre><code><span class="k">claude</span> --plugin-dir ./atomic-cc</code></pre>
+      </div>
+
+      <h3>Requirements</h3>
+      <ul class="measure">
+        <li><strong>Claude Code 2.1.154 or newer</strong> — earlier versions have no dynamic workflows.</li>
+        <li><strong>A paid plan.</strong> On Pro, enable workflows in <code>/config</code>.</li>
+        <li><strong><code>jq</code> on <code>PATH</code></strong>, or the hooks silently disable themselves.</li>
+        <li><strong>Budget for real agents.</strong> An <code>adversarial-verification</code> run at
+        standard rigor costs roughly 4–12 agent invocations.</li>
+      </ul>
+
+      <h3>Four slash commands for the human</h3>
+      <div class="scroller">
+        <table>
+          <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">/atomic:status</td><td>Reads the run state: receipts, ledger, blockers, approval, and a summary of the evidence log.</td></tr>
+            <tr><td class="mono">/atomic:approve</td><td>The human override. Seals approval and opens the commit gate — and states plainly when it is overriding an unconverged verification.</td></tr>
+            <tr><td class="mono">/atomic:resume</td><td>Cross-session re-entry, reconstructed from the persisted receipts, ledger and last decision.</td></tr>
+            <tr><td class="mono">/atomic:rigor</td><td>Sets the effort profile: lean (1 verifier, 1 repair), standard (3, 2) or thorough (5, 4).</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">All four are marked <code>disable-model-invocation</code>: Claude cannot call
+      them on its own. Approving a run stays a human act.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 05 · EXAMPLE ══════════════════════════════════════════════════════ -->
+<section class="clause" id="example">
+  <div class="shell">
+    <div class="clause-mark"><span class="num">§&#8239;05</span><span class="lbl">A run,<br>end to end</span></div>
+    <div>
+      <h2>What a gated run actually looks like.</h2>
+
+      <div class="code">
+        <div class="code-head"><span>session · illustrative</span></div>
+<pre><code><span class="k">/atomic:adversarial-verification</span> <span class="p">{</span><span class="s">"run_id"</span>: <span class="s">"av-login-fix-01"</span>,
+  <span class="s">"task"</span>: <span class="s">"Fix the login redirect loop"</span>,
+  <span class="s">"criteria"</span>: [<span class="s">"/login redirects authenticated users to /dashboard"</span>,
+               <span class="s">"existing auth tests still pass"</span>]<span class="p">}</span>
+
+<span class="c">  Implement  · worker writes the fix and a candidate record</span>
+<span class="c">  Verify     · 3 fresh verifiers rerun the tests themselves</span>
+<span class="c">  Reduce     · 2 of 3 passed → not unanimous → repair</span>
+<span class="c">  Repair     · worker fixes only the blocking findings</span>
+<span class="c">  Verify     · 3 of 3 passed</span>
+<span class="c">  Reduce     · accept · approval.json sealed</span></code></pre>
+      </div>
+
+      <p class="measure">
+        Had the reducer not accepted, a commit attempt would have been refused by the hook rather
+        than by a polite refusal in the transcript:
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>PreToolUse · deny</span></div>
+<pre><code><span class="c">agent attempted →</span> git commit -m <span class="s">"fix login redirect"</span>
+
+<span class="p">atomic-cc:</span> run "av-login-fix-01" is not approved yet - the
+deterministic reducer (or /atomic:approve) must seal
+approval.json first. Check /atomic:status.</code></pre>
+      </div>
+
+      <p class="measure">
+        Everything a run knows about itself is on disk, in the project, in plain text — which is what
+        makes <code>/atomic:status</code> and <code>/atomic:resume</code> possible after the session
+        that started the run is long gone.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>.atomic-cc/</span></div>
+<pre><code>.atomic-cc/
+├── run-state.json            <span class="c"># active run + status</span>
+├── evidence/&lt;session&gt;.jsonl  <span class="c"># real command logs, from the hook</span>
+└── runs/&lt;run_id&gt;/
+    ├── receipt-*.json        <span class="c"># worker receipts</span>
+    ├── ledger.jsonl          <span class="c"># goal-workflow ledger</span>
+    ├── decision.json         <span class="c"># last reducer decision, if unconverged</span>
+    └── approval.json         <span class="c"># written ONLY on approval</span></code></pre>
+      </div>
+      <p class="note">Add <code>.atomic-cc/</code> to your <code>.gitignore</code> unless you want the
+      run history committed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 06 · LIMITS ═══════════════════════════════════════════════════════ -->
+<section class="clause" id="limits">
+  <div class="shell">
+    <div class="clause-mark"><span class="num">§&#8239;06</span><span class="lbl">Honest<br>limits</span></div>
+    <div>
+      <h2>What it cannot do, and where it is still young.</h2>
+      <div class="measure">
+        <p>
+          A verification tool that oversells itself is worse than none, so: atomic-cc is version
+          <strong>0.1.0</strong>. The convergence rules are ported carefully and the hooks do what
+          this page says they do, but the project is new and has not been through many hands.
+        </p>
+      </div>
+
+      <div class="ledger">
+        <div class="row">
+          <div class="k">It cannot fix reasoning</div>
+          <div class="d"><p>Nothing here stops a model from thinking badly. It stops bad thinking
+          from becoming an unverified commit. Those are different promises, and only the second one
+          is made.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Two things to confirm on your first run</div>
+          <div class="d"><p>Whether <code>agentType</code> wants the namespaced name
+          (<code>atomic:verifier</code>) or the bare one — the runtime error lists what it accepts —
+          and whether your plan exposes dynamic workflows at all.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Deliberate gaps against upstream Atomic</div>
+          <div class="d"><p>No <code>context:"fork"</code> stages. Native workflow resume with cached
+          results is same-session only, so cross-session re-entry goes through
+          <code>/atomic:resume</code> and the persisted artifacts. No mid-run human prompts — use
+          <code>/atomic:approve</code> and split the work into phases. Atomic's file-based
+          <code>ctx.task</code> plumbing is emulated by having agents read and write project files
+          under <code>.atomic-cc/</code>.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">The gate is not a sandbox</div>
+          <div class="d"><p>It denies <code>git commit</code> and <code>git push</code> from the Bash
+          tool while a run is unapproved. It is a discipline for agents, not a security boundary
+          against a determined one, and it fails open without <code>jq</code>.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Verification is not free</div>
+          <div class="d"><p>Every reviewer is a real agent doing real work. Thorough rigor means five
+          of them per round. Use <code>/atomic:rigor lean</code> for small changes and save the
+          expensive profile for the money paths.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- ══ FOOTER ════════════════════════════════════════════════════════════ -->
+<footer id="attribution">
+  <div class="shell cols">
+    <div class="clause-mark"><span class="num">§&#8239;07</span><span class="lbl">Credit<br>where due</span></div>
+    <div>
+      <h2>Licence &amp; attribution</h2>
+      <p>
+        atomic-cc is released under the <a href="https://github.com/uppifyagency/atomic-cc/blob/main/LICENSE">MIT&nbsp;licence</a>,
+        © 2026 Vlad Vrinceanu.
+      </p>
+      <p>
+        It is an <strong>independent port</strong> of concepts, contracts and reducer rules from
+        <a href="https://github.com/bastani-inc/atomic">Atomic by Bastani</a> (MIT), whose
+        documentation lives at <a href="https://docs.bastani.ai">docs.bastani.ai</a>. It bundles no
+        Atomic code: the convergence logic here was re-derived from the published upstream sources
+        and rewritten against Claude Code's own plugin primitives. The design being ported — the
+        <code>stop_review_loop</code> approval contract, the quorum reducer, the finding
+        classification, the blocker-threshold anti-loop, the pass/fail adversarial verifier with a
+        fresh-context reducer — is Atomic's work, and the credit for it is theirs. If you want the
+        original, go and read it.
+      </p>
+      <p class="disclaim">
+        atomic-cc is not affiliated with, endorsed by, or supported by Bastani or Anthropic. It is a
+        third-party community project. "Claude" and "Claude Code" are trademarks of Anthropic, used
+        here descriptively to say what this software is: a plugin for Claude Code.
+      </p>
+      <div class="colophon">
+        <span>Set in Newsreader &amp; IBM Plex Mono (SIL OFL)</span>
+        <span><a href="https://github.com/uppifyagency/atomic-cc">github.com/uppifyagency/atomic-cc</a></span>
+        <span>v0.1.0</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('.copy').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var text = btn.getAttribute('data-copy') || '';
+    var done = function(){
+      var old = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function(){ btn.textContent = old; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function(){});
+    }
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# atomic-cc run state (run-state.json, evidence logs, receipts, ledgers)
+.atomic-cc/
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Editors
+.idea/
+*.swp
