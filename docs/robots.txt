@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://uppifyagency.github.io/atomic-cc/sitemap.xml
+Sitemap: https://atomic-cc.vercel.app/sitemap.xml
