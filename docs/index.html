@@ -491,10 +491,10 @@ html{scroll-behavior:smooth}
         <section class="yes">
           <h3>What gets installed</h3>
           <ul>
-            <li>Four workflow scripts, run by Claude Code's workflow runtime</li>
+            <li>Nine workflow scripts, run by Claude Code's workflow runtime</li>
             <li>Ten subagent definitions, each with its own tool allowlist</li>
-            <li>Four skills, exposed as <code>/atomic:*</code> slash commands</li>
-            <li>Three shell hooks wired to <code>PostToolUse</code>, <code>PreToolUse</code> and <code>Stop</code></li>
+            <li>Five skills, exposed as <code>/atomic:*</code> slash commands</li>
+            <li>Four shell hooks wired to <code>PostToolUse</code>, <code>PreToolUse</code>, <code>Stop</code> and <code>SessionStart</code></li>
             <li>A per-project <code>.atomic-cc/</code> directory of run state and evidence</li>
           </ul>
         </section>
@@ -516,9 +516,9 @@ html{scroll-behavior:smooth}
 <!-- ══ 02 · WORKFLOWS ════════════════════════════════════════════════════ -->
 <section class="clause" id="workflows">
   <div class="shell">
-    <div class="clause-mark"><span class="num">§&#8239;02</span><span class="lbl">Four<br>workflows</span></div>
+    <div class="clause-mark"><span class="num">§&#8239;02</span><span class="lbl">Nine<br>workflows</span></div>
     <div>
-      <h2>Four ways to make an agent prove its work.</h2>
+      <h2>Nine ways to make an agent prove its work.</h2>
       <p class="measure">
         Each workflow is invoked as a slash command and takes a single JSON object. A
         <code>run_id</code> is required and must match <code>[A-Za-z0-9._-]</code>, at most
@@ -552,7 +552,7 @@ html{scroll-behavior:smooth}
         <div class="row">
           <div class="k">/atomic:adversarial-verification<span class="sub">unanimity override</span></div>
           <div class="d">
-            <p>The sharpest of the four. A worker writes a candidate record of what it did and what
+            <p>The sharpest of the nine. A worker writes a candidate record of what it did and what
             it observed; N fresh-context verifiers return a bare <code>pass</code>/<code>fail</code>
             with evidence, deriving their checks from a rubric before they are allowed to trust the
             candidate; a separate fresh-context reducer decides accept, repair or reject. Its
@@ -567,6 +567,50 @@ html{scroll-behavior:smooth}
             batches bounded by <code>max_concurrency</code>, then hold a synthesis barrier that
             reads every branch artifact together, resolves contradictions explicitly and flags
             anything a branch claimed without evidence.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:classify-and-act<span class="sub">deterministic route</span></div>
+          <div class="d">
+            <p>A classifier assigns the request a category with a confidence score; the route is
+            decided in code against a threshold, not by the model. Below the threshold the run
+            records <code>needs_human</code> instead of guessing — upstream's mid-run human gate
+            has no Claude Code equivalent, so the decision is persisted rather than paused on.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:generate-and-filter<span class="sub">rubric shortlist</span></div>
+          <div class="d">
+            <p>N independent candidates generated in bounded batches, deduplicated and scored
+            against a rubric, then optionally re-ranked by a fresh judge that reads only the
+            shortlist. The shortlist itself is computed in code from the scores.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:tournament<span class="sub">judged bracket</span></div>
+          <div class="d">
+            <p>Independent whole-task attempts seeded into a balanced single-elimination bracket —
+            byes and walkovers included. Every match is judged in fresh context strictly on the
+            original prompt, and the full bracket with rationales is written to
+            <code>bracket.json</code>, so the winner is auditable.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:loop-until-done<span class="sub">evidence gate</span></div>
+          <div class="d">
+            <p>A bounded iterate-and-evaluate loop over a durable ledger. Each cycle a fresh
+            evaluator checks the actual repo state for explicit evidence of completion — a claim
+            without evidence never ends the loop. Exhaustion is <code>failed</code>, with the
+            remaining work surfaced.</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="k">/atomic:open-claude-design<span class="sub">headless</span></div>
+          <div class="d">
+            <p>Design brief, online reference discovery, a self-contained HTML preview, then a
+            bounded loop of fresh-context critics whose blocking findings must be repaired before
+            export. Upstream's live playwright preview with a human feedback gate cannot run
+            inside a workflow, so this is upstream's own headless variant.</p>
           </div>
         </div>
       </div>
@@ -795,7 +839,7 @@ claude plugin install atomic@atomic-cc">Copy</button></div>
         standard rigor costs roughly 4–12 agent invocations.</li>
       </ul>
 
-      <h3>Four slash commands for the human</h3>
+      <h3>Five slash commands for the human</h3>
       <div class="scroller">
         <table>
           <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
@@ -804,11 +848,13 @@ claude plugin install atomic@atomic-cc">Copy</button></div>
             <tr><td class="mono">/atomic:approve</td><td>The human override. Seals approval and opens the commit gate — and states plainly when it is overriding an unconverged verification.</td></tr>
             <tr><td class="mono">/atomic:resume</td><td>Cross-session re-entry, reconstructed from the persisted receipts, ledger and last decision.</td></tr>
             <tr><td class="mono">/atomic:rigor</td><td>Sets the effort profile: lean (1 verifier, 1 repair), standard (3, 2) or thorough (5, 4).</td></tr>
+            <tr><td class="mono">/atomic:sync-upstream</td><td>Reviews upstream Atomic commits since the SHA in <code>upstream.lock</code>, applies port-relevant changes, bumps the version and rewrites the lock.</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="note">All four are marked <code>disable-model-invocation</code>: Claude cannot call
-      them on its own. Approving a run stays a human act.</p>
+      <p class="note">The first four are marked <code>disable-model-invocation</code>: Claude cannot
+      call them on its own — approving a run stays a human act. <code>sync-upstream</code> is the
+      exception, so the session can act on the upstream watch's drift notice.</p>
     </div>
   </div>
 </section>
