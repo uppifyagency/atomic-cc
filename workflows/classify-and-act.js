@@ -35,6 +35,19 @@ const CATEGORIES = Array.isArray(A.categories) && A.categories.length
 const THRESHOLD = Math.min(Math.max(A.confidence_threshold ?? 0.75, 0.5), 0.99) // Atomic default 0.75
 const PLUGIN_ROOT = typeof A.plugin_root === 'string' && A.plugin_root.trim()
   ? A.plugin_root.trim() : null
+// F10 (independent audit, 2026-08-12): the gate used to be OPT-IN. Every gating
+// path in this file is conditional on plugin_root, and plugin_root appeared in no
+// usage example anywhere in the docs — so a user who followed the documentation
+// got no registration, no commit gate, no seal and no stop guard, while the docs
+// asserted the opposite. It now fails CLOSED: a run that cannot register refuses
+// to start rather than running ungated while claiming to be gated.
+if (!PLUGIN_ROOT) throw new Error(
+  'atomic: plugin_root is required and was not supplied.\n' +
+  'Without it this run cannot register with the commit gate, so nothing would be gated, ' +
+  'sealed, or guarded by the Stop hook — the run would look supervised and be unsupervised.\n' +
+  'Pass the plugin install path, e.g.\n' +
+  '  {"run_id": "...", "plugin_root": "/path/to/atomic-cc"}\n' +
+  'The SessionStart notice prints the exact path for this session; `claude plugin list` also shows it.')
 const DIR = `.atomic-cc/runs/${A.run_id}`
 const CLASS_PATH = `${DIR}/classification.json`
 
@@ -46,17 +59,11 @@ function safeName(value) {
 
 // This workflow's action stage may mutate the repository (implementation/fix/code
 // categories), so the run is registered with the approval gate via the plugin CLI.
-const BEGIN = PLUGIN_ROOT
-  ? `FIRST, before any other action, run this exact shell command to register the run with the approval gate:
+const BEGIN = `FIRST, before any other action, run this exact shell command to register the run with the approval gate:
 "${PLUGIN_ROOT}/bin/run-state.sh" begin ${A.run_id}
 Never Write/Edit .atomic-cc/run-state.json or approval.json directly — a hook denies those writes; the CLI is the only channel.`
-  : `No plugin_root was provided: SKIP run-state registration entirely (do NOT create .atomic-cc/run-state.json), and mention "run-state registration skipped (no plugin_root)" in your report.`
 
 async function sealStage(status, approved) {
-  if (!PLUGIN_ROOT) {
-    log(`atomic classify-and-act: no plugin_root — run-state seal (${status}) skipped`)
-    return
-  }
   await agent(
     `Atomic run "${A.run_id}" ended: status "${status}", approved=${approved}.
 Run this exact shell command and do nothing else:

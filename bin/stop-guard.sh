@@ -25,14 +25,26 @@ ACTIVE=$(printf '%s' "$IN" | jq -r '.stop_hook_active // false' 2>/dev/null)
 [ "$ACTIVE" = "true" ] && exit 0
 
 CWD=$(printf '%s' "$IN" | jq -r '.cwd // empty' 2>/dev/null)
-START="${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}"
 
-# Walk up so a session started in a subdirectory still sees the run.
+# Audit finding F6: this anchored at CLAUDE_PROJECT_DIR and walked only upward,
+# so a run registered in a nested repo (monorepo package, submodule, worktree, or
+# a session opened one level above) was invisible: the guard never blocked and the
+# run was silently abandoned in_progress. Check EVERY candidate anchor, most
+# specific first, exactly as approval-gate.sh does.
 STATE=""
-DIR="$START"
-while [ -n "$DIR" ] && [ "$DIR" != "/" ]; do
-  if [ -f "$DIR/.atomic-cc/run-state.json" ]; then STATE="$DIR/.atomic-cc/run-state.json"; break; fi
-  DIR=$(dirname "$DIR")
+for START in "$CWD" "${CLAUDE_PROJECT_DIR:-}" "$PWD"; do
+  [ -n "$START" ] || continue
+  DIR="$START"
+  while [ -n "$DIR" ] && [ "$DIR" != "/" ]; do
+    if [ -f "$DIR/.atomic-cc/run-state.json" ]; then
+      if [ "$(jq -r '.status // empty' "$DIR/.atomic-cc/run-state.json" 2>/dev/null)" = "in_progress" ]; then
+        STATE="$DIR/.atomic-cc/run-state.json"; break
+      fi
+      [ -n "$STATE" ] || STATE="$DIR/.atomic-cc/run-state.json"
+    fi
+    DIR=$(dirname "$DIR")
+  done
+  case "$STATE" in "") ;; *) [ "$(jq -r '.status // empty' "$STATE" 2>/dev/null)" = "in_progress" ] && break ;; esac
 done
 [ -n "$STATE" ] || exit 0
 

@@ -114,13 +114,37 @@ group('goal: quorum arithmetic (upstream DEFAULT_REVIEW_QUORUM = 2 of 3)')
 }
 
 {
-  // REGRESSION (port once discarded null reviewers and required
-  // reviews.length === expected, so one crashed reviewer cancelled a reached
-  // quorum). Upstream synthesizes a reviewer_failure decision and still counts
-  // 3 records: quorum is over APPROVALS, not arrivals.
+  // CORRECTED after an independent audit (2026-08-12, finding F4). This test used
+  // to assert the OPPOSITE — that two survivors could still form the 2-of-3
+  // quorum — and justified it by claiming upstream "synthesizes a
+  // reviewer_failure decision and still counts 3 records: quorum is over
+  // APPROVALS, not arrivals". That misread upstream. Upstream runs the reviewers
+  // under `ctx.parallel(..., { failFast: true })`, so a reviewer STAGE that dies
+  // rejects the whole batch and the runner forces needs_human; the synthesis it
+  // does perform is for a reviewer that returned something UNPARSEABLE inside a
+  // batch that completed. A caller promised 2-of-3 independent review must never
+  // silently receive 2-of-2, so one death now ends the turn as needs_human.
   const r = await runWorkflow(GOAL, { args: goalArgs(),
     agent: router({ reviewsPerTurn: [[review(), review(), null]] }) })
-  eq('crashed reviewer does not cancel a met quorum', r.value.status, 'complete')
+  eq('one dead reviewer fails CLOSED, as upstream does', r.value.status, 'needs_human')
+  eq('and never approves', r.value.approved, false)
+  check('the reason names the reviewer that died',
+    /risk-reviewer/.test(String(r.value.final_decision?.reason ?? '')),
+    String(r.value.final_decision?.reason ?? '').slice(0, 160))
+  check('and counts the deaths against the expected seats',
+    r.value.final_decision?.dead_reviewers?.length === 1 &&
+    r.value.final_decision?.reviewers_expected === 3,
+    JSON.stringify(r.value.final_decision?.dead_reviewers))
+}
+
+{
+  // The synthesis upstream DOES do: a reviewer that returns an unparseable or
+  // error-flagged decision is recorded as a non-approving review, and the round
+  // still proceeds — it just cannot reach quorum on those votes.
+  const r = await runWorkflow(GOAL, { args: goalArgs({ max_turns: 1 }),
+    agent: router({ reviewsPerTurn: [[review(), review(),
+      review({ stop_review_loop: false, reviewer_error: envError() })]] }) })
+  eq('an errored-but-returned reviewer does not abort the batch', r.value.status, 'complete')
 }
 
 {
@@ -276,13 +300,25 @@ group('goal: run lifecycle and escalation')
 }
 
 {
-  // No plugin_root: the run must not pretend to register state.
-  const r = await runWorkflow(GOAL, { args: goalArgs({ plugin_root: undefined }),
-    agent: router({ reviewsPerTurn: [[review(), review(), review()]] }) })
-  check('without plugin_root the worker is told to skip registration',
-    r.calls.some(c => c.prompt.includes('plugin_root was not provided')))
-  check('without plugin_root no run-state command is issued',
-    !r.calls.some(c => c.prompt.includes('run-state.sh')))
+  // CORRECTED after the independent audit (finding F10). This used to assert that
+  // a run WITHOUT plugin_root proceeded politely, telling the worker to skip
+  // registration. That is precisely the hole the auditor found: every documented
+  // invocation omitted plugin_root, so every documented invocation ran with the
+  // commit gate, the seal and the Stop guard all inert while the prose promised
+  // otherwise. A run that cannot register must not start at all.
+  let threw = null
+  try {
+    await runWorkflow(GOAL, { args: goalArgs({ plugin_root: undefined }),
+      agent: router({ reviewsPerTurn: [[review(), review(), review()]] }) })
+  } catch (e) { threw = e }
+  check('without plugin_root the run refuses to start', threw !== null,
+    threw === null ? 'it ran anyway' : 'threw')
+  check('and says what is missing and why it matters',
+    /plugin_root is required/.test(String(threw?.message)) &&
+    /gated|sealed|guarded/.test(String(threw?.message)),
+    String(threw?.message ?? '').split('\n')[0])
+  check('and tells the caller how to supply it',
+    /plugin_root/.test(String(threw?.message)) && /claude plugin list|SessionStart/.test(String(threw?.message)))
 }
 
 group('goal: reviewer decorrelation and personas')

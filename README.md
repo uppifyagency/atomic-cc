@@ -1,21 +1,23 @@
 # atomic-cc
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-1d1c18)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0-b8431f)](.claude-plugin/plugin.json)
-[![Tests](https://img.shields.io/badge/tests-537%20passing-1d1c18)](test/run-tests.sh)
+[![Version](https://img.shields.io/badge/version-0.4.0-b8431f)](.claude-plugin/plugin.json)
+[![Tests](https://img.shields.io/badge/tests-657%20passing-1d1c18)](test/run-tests.sh)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-%E2%89%A5%202.1.154-1d1c18)](https://docs.claude.com/en/docs/claude-code)
 [![Landing page](https://img.shields.io/badge/docs-landing%20page-b8431f)](https://atomic-cc.vercel.app/)
 
 **A verification harness that runs inside Claude Code — as a plugin, and nothing else.** There is no
 separate CLI to learn, no daemon to keep alive, no service to sign up for and no API key of its own.
 You install it into the Claude Code session you already use, and nine workflows (all of Atomic's
-builtins), eleven subagents, twelve slash commands and six hooks appear at the prompt.
+builtins), eleven subagents, twelve slash commands and seven hooks appear at the prompt.
 
 Approval is **arithmetic in plain JavaScript**: the reviewers' `stop_review_loop` booleans are counted
 by a reducer ported from Atomic, and no model decides the outcome. The state transition that opens
-the commit gate goes through one small shell CLI (`bin/run-state.sh`) that validates it; agents can
-invoke that CLI but cannot write the gate files themselves — a hook denies it. While a run is
-in progress and unapproved, `git commit` is denied.
+the commit gate goes through one small shell CLI (`bin/run-state.sh`) that validates it, and hooks
+deny the direct writes to the gate files that they can see. An agent that holds `Bash` can still
+invoke that CLI itself — see [honest limits](#design-guarantees-and-honest-limits), which says so
+plainly rather than implying otherwise. While a run is in progress and unapproved, `git commit`
+is denied.
 
 **This is discipline for agents, not a sandbox.** It is not a security boundary: a determined model
 can still work around a shell matcher, and upstream Atomic makes the same disclaimer about itself.
@@ -26,7 +28,8 @@ the line sits.
 Port of [Atomic](https://github.com/bastani-inc/atomic) (bastani-inc, MIT) into a native Claude Code plugin: schema-validated workflow stages, fresh-context adversarial verification, deterministic reducers, real-command evidence logs, and commit gates — all built on officially documented Claude Code primitives.
 
 > **Independent port.** Not affiliated with, endorsed by, or supported by Bastani or Anthropic.
-> Bundles no Atomic code. See [Licence & attribution](#license--attribution) and [`NOTICE`](NOTICE).
+> Prompt contracts are reproduced verbatim under MIT (88 measured lines and counting); the reducer
+> logic is re-derived. See [Licence & attribution](#license--attribution) and [`NOTICE`](NOTICE).
 
 **[Landing page →](https://atomic-cc.vercel.app/)**
 
@@ -46,11 +49,12 @@ Port of [Atomic](https://github.com/bastani-inc/atomic) (bastani-inc, MIT) into 
 | 7 prompt-template commands | `/atomic:parallel-review` `/atomic:review-loop` `/atomic:parallel-research` `/atomic:parallel-cleanup` `/atomic:parallel-context-build` `/atomic:parallel-handoff-plan` `/atomic:gather-context-and-clarify` — ports of Atomic's `prompts/` layer, which is where the research and cleanup subagents earn their keep |
 | subagents | worker, debugger, code-simplifier + 6 read-only research agents = the **9 subagents ported from Atomic**, plus 2 CC-specific ones: `verifier` (Atomic runs reviewers as workflow stages; CC needs a named `agentType`) and `scribe` (transcribes JS-composed audit artifacts verbatim, because workflow scripts have no filesystem access) |
 | Evidence logger (hook) | every build/test/typecheck Bash call from ANY agent logged with real stdout/stderr to `.atomic-cc/evidence/` |
-| Approval gate (hook) | commit-shaped commands (`git commit/push/am/cherry-pick/update-ref`, `gh pr create/merge`, `jj commit`) denied while a run is `in_progress` and unapproved — and shell tampering with the gate's own state files denied outright |
+| Approval gate (hook) | while a run is `in_progress` and unapproved: every git verb that creates a commit or moves a ref (`commit/push/am/cherry-pick/revert/merge/rebase/tag/notes/apply/update-ref/commit-tree/stash`), including per-character quoting, plus `gh pr create/merge/ready`, `glab mr create`, `hub pull-request`, `jj`, `sl`, `hg` — and any command that writes, moves, deletes or `cd`s into `.atomic-cc`. It is a regex over shell text, not containment: see [honest limits](#design-guarantees-and-honest-limits) |
 | Tamper guard (hook) | `Write`/`Edit` on `run-state.json`, `approval.json`, or the evidence log denied unconditionally: those are the CLI's files, not an agent's |
 | Stop guard (hook) | turns can't silently end with a run `in_progress` (bounded, anti-loop, counter resets when the run is sealed) |
 | `/atomic:status` `/atomic:approve` `/atomic:resume` `/atomic:rigor` | run inspection, human approval override, cross-session re-entry, rigor profiles (effort budgets only — a profile cannot weaken a review gate) |
 | Upstream watch (hook) + `/atomic:sync-upstream` | SessionStart hook compares `bastani-inc/atomic` HEAD with `upstream.lock` (max one network check per 24h, stamped in your user cache — never inside your projects; silenced by `ATOMIC_OFFLINE=1` or `ATOMIC_SKIP_VERSION_CHECK=1`). On drift it prints a notice; the sync skill is **user-invoked only** and may not touch `bin/` or `hooks/` |
+| Gate notice (hook) | SessionStart prints this session's plugin root and states that every `/atomic:*` workflow must be invoked with it as `plugin_root`. The workflows **refuse to start without it**, because a run that cannot register with the gate would look supervised and be unsupervised |
 | Rigor notice (hook) | SessionStart injects this project's rigor profile so the budgets are actually seen and passed — `/atomic:rigor` is not a file nobody reads |
 
 ## Requirements
@@ -81,17 +85,37 @@ claude --plugin-dir ./atomic-cc
 ## Usage
 
 ```
-/atomic:adversarial-verification {"run_id": "av-login-fix-01", "task": "Fix the login redirect loop", "criteria": ["/login redirects authenticated users to /dashboard", "existing auth tests still pass"]}
+/atomic:adversarial-verification {"run_id": "av-login-fix-01", "task": "Fix the login redirect loop", "criteria": ["/login redirects authenticated users to /dashboard", "existing auth tests still pass"], "plugin_root": "/path/to/atomic-cc"}
 ```
 
 Arguments are a **JSON object**. A slash command hands the workflow everything after the command name as one string, so the scripts parse the first `{…}` block out of it — trailing prose after the JSON is fine and ignored.
+
+### `plugin_root` is required, in every workflow, always
+
+```
+/atomic:goal {"run_id": "g-checkout-01", "objective": "…", "acceptance_criteria": ["…"], "plugin_root": "/path/to/atomic-cc"}
+/atomic:tournament {"run_id": "t-cache-01", "prompt": "…", "num_attempts": 4, "plugin_root": "/path/to/atomic-cc"}
+```
+
+It is the plugin's install path, and it is how a workflow finds `bin/run-state.sh` — the only writer of
+the gate state. Workflow scripts run in a sandbox with no filesystem and no environment access, so they
+cannot discover it themselves; it has to be passed in.
+
+Every workflow **refuses to start** without it. That is deliberate, and it is a fix, not a rough edge: an
+independent audit found the gate had been opt-in, and no usage example anywhere passed `plugin_root` — so
+a user who followed this README got a run with the commit gate, the seal, and the Stop guard all inert
+while the documentation promised otherwise. An unsupervised run that looks supervised is worse than an
+honest refusal.
+
+You do not have to remember the path. A SessionStart hook (`bin/gate-notice.sh`) prints it at the top of
+every session; `claude plugin list` shows it too.
 
 `run_id` is required, must be unique per run, and must match `[A-Za-z0-9._-]{1,64}` (it becomes a directory name). Workflow scripts cannot generate ids: `Date.now`/`Math.random` are unavailable by design — they would break resume.
 
 **Running headless.** Dynamic workflows sit behind a review gate that needs interactive approval. In `claude -p` you must allowlist the tool explicitly, or the run dies before it starts:
 
 ```bash
-claude -p '/atomic:goal {"run_id":"g-1","objective":"..."}' \
+claude -p '/atomic:goal {"run_id":"g-1","objective":"...","plugin_root":"/path/to/atomic-cc"}' \
   --plugin-dir /path/to/atomic-cc \
   --allowedTools "Workflow,Bash,Read,Write,Edit,Grep,Glob" \
   --permission-mode acceptEdits
@@ -103,7 +127,7 @@ Run state lives in your project:
 
 ```
 .atomic-cc/
-├── run-state.json           # written ONLY by bin/run-state.sh; hooks deny every other writer
+├── run-state.json           # bin/run-state.sh writes it; hooks deny the direct writes they can see
 ├── config.json              # rigor profile (bin/rigor.sh)
 ├── evidence/<session>.jsonl # real command logs written by the PostToolUse hook
 └── runs/<run_id>/
@@ -140,11 +164,25 @@ discarded, so one dead reviewer cannot cancel a quorum that was already reached.
 module constants, not inputs: nothing a caller or a rigor profile passes can reduce a gate to a
 single reviewer.
 
-**Where the model still sits in the loop, stated plainly.** The state transition that opens the
-commit gate is a validated shell CLI (`bin/run-state.sh`), and direct `Write`/`Edit` on
-`run-state.json` / `approval.json` is denied by a hook — so an agent cannot forge the token the gate
-checks. But an agent does *invoke* that CLI, and the Bash matcher that catches commit-shaped commands
-is a regex: `sh -c`, `eval`, aliases, or an MCP/IDE git integration are not Bash calls the hook sees.
+**Where the model still sits in the loop, stated plainly.** An earlier version of this section said
+"an agent cannot forge the token the gate checks." **That was false, and an independent audit proved
+it** by defeating the gate with ordinary shell idioms — `cd` into the run directory and redirect into
+a bare `approval.json`, a doubled slash in the path, a variable holding the directory, `rm -rf` on the
+state itself — none of them in the `sh -c`/`eval` class this file used to disclose. Those specific
+holes are closed and regression-tested. The honest statement of what remains:
+
+- An agent that holds `Bash` **can** approve its own run. `bin/run-state.sh seal <id> complete true`
+  is a command the gate deliberately allows, because it is how the reducer seals. It now refuses
+  unless the run's review records exist on disk, which means an approval can always be traced to
+  the review it claims to summarise — but a run that produced those records can still seal itself.
+- `bin/run-state.sh approve` no longer *asserts* a human. It records `human: true` only when a
+  terminal is attached; an agent-invoked approval is written `human: false` with the channel named,
+  so the audit trail states what it can establish rather than what would be flattering.
+- The Bash matcher is still **a regex over shell text**. It now covers every git verb that creates a
+  commit or moves a ref, per-character quoting, `gh`/`glab`/`hub`/`jj`/`sl`/`hg`, and writes,
+  moves, deletions or a `cd` into `.atomic-cc`. It does not cover a variable holding the whole
+  command, a language runtime, an MCP git server, or your IDE's git UI.
+
 **This is discipline for agents, not a sandbox, and not a security boundary.** Upstream Atomic says
 the same about itself ("no command-level allow/deny policy for bash"). What it prevents is a run
 drifting into an unverified commit by ordinary momentum; what it cannot prevent is a model that sets
@@ -163,10 +201,11 @@ report" is a prompt, not a permission, and the gate covers them too. A run may o
 CLI refuses to release a gate another run is holding.
 
 **Which runs may mint an approval.** `approval.json` is the receipt that says *independently
-reviewed*, so only a workflow with a review gate writes one: goal (quorum of 2 of 3), ralph (unanimous
-over 2 seats), adversarial-verification (verifier plus reducer), and loop-until-done — the weakest of
-the four, a single independent evaluator rather than an adversarial quorum. The other five seal
-`complete` with `approved=false`. A judged tournament bracket picks the best of N attempts without
+reviewed*, so only a workflow with a real review gate writes one: goal (quorum of 2 of 3), ralph
+(unanimous over 2 seats), and adversarial-verification (every verifier passed *and* the reducer
+accepted). It was four until 0.4.0: loop-until-done sealed `approved=true` on one evaluator's
+`done=true`, a judgement upstream has no approval concept for, so a single non-quorum vote was opening
+the commit gate. It now seals `approved=false`. The other six seal `complete` with `approved=false`. A judged tournament bracket picks the best of N attempts without
 checking any of them against acceptance criteria; classify-and-act routes and acts but never reviews;
 a shortlist ranks options; an investigation gathers evidence; a design critic is not a human in a
 browser. Those runs finish, they just do not certify. `/atomic:approve` is how a human signs off on
@@ -186,7 +225,7 @@ while CC can only vary opus/sonnet/haiku plus charters, so correlated blind spot
 here than upstream; no playwright/tmux E2E or QA-video stage, so E2E guidance asks for the strongest
 available proof instead.
 
-**Tests.** `test/run-tests.sh` — 537 assertions across four suites: the hook contracts and run-state
+**Tests.** `test/run-tests.sh` — 657 assertions across four suites: the hook contracts and run-state
 lifecycle (real payloads against the real scripts, including the no-jq degraded path and the refusal
 to seal a gate another run holds), the gate arithmetic (both reducers executed end to end with mocked
 agents: quorum, crashed reviewers, the blocked trigger in both directions, escalation, criteria
@@ -209,7 +248,7 @@ suite passes and one of these still misbehaves, the problem is the platform surf
 
 MIT — see [`LICENSE`](LICENSE), © 2026 Vlad Vrinceanu.
 
-This plugin is an **independent port** of concepts, contracts, and reducer rules from [Atomic by Bastani](https://github.com/bastani-inc/atomic) (MIT). It bundles no Atomic code; the reducer logic was re-derived from the published sources (`review-convergence.ts`, `goal-schemas.ts`) and the official docs at [docs.bastani.ai](https://docs.bastani.ai). The design being ported — the `stop_review_loop` approval contract, the quorum reducer, the finding classification, the blocker-threshold anti-loop, the pass/fail adversarial verifier with a fresh-context reducer — is Atomic's work, and the credit for it is theirs. If you want the original, go and read it.
+This plugin is an **independent port** of concepts, contracts, and reducer rules from [Atomic by Bastani](https://github.com/bastani-inc/atomic) (MIT). The reducer *logic* is re-derived rather than transliterated (TypeScript runtime → Claude Code workflow sandbox), but the **prompt text is reproduced verbatim** — an independent audit measured 88 byte-identical lines, and that is a floor. Paraphrasing a review contract changes what reviewers check, so copying it is the point. MIT permits this and asks that the upstream copyright travel along; it does, in [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). The design being ported — the `stop_review_loop` approval contract, the quorum reducer, the finding classification, the blocker-threshold anti-loop, the pass/fail adversarial verifier with a fresh-context reducer — is Atomic's work, and the credit for it is theirs. If you want the original, go and read it.
 
 **atomic-cc is not affiliated with, endorsed by, or supported by Bastani or Anthropic.** It is a
 third-party community project. No Atomic logo, wordmark, brand colour or marketing copy is used

@@ -42,12 +42,26 @@ const MAX_CONCURRENCY = Math.min(Math.max(A.max_concurrency ?? 4, 1), 8) // Atom
 // Gate transitions go only through the plugin CLI; direct writes to
 // run-state.json / approval.json are denied by the tamper-guard hook.
 const PLUGIN_ROOT = typeof A.plugin_root === 'string' ? A.plugin_root.trim() : ''
-const runStateCmd = (sub) => PLUGIN_ROOT ? `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}` : null
+// F10 (independent audit, 2026-08-12): the gate used to be OPT-IN. Every gating
+// path in this file is conditional on plugin_root, and plugin_root appeared in no
+// usage example anywhere in the docs — so a user who followed the documentation
+// got no registration, no commit gate, no seal and no stop guard, while the docs
+// asserted the opposite. It now fails CLOSED: a run that cannot register refuses
+// to start rather than running ungated while claiming to be gated.
+if (!PLUGIN_ROOT) throw new Error(
+  'atomic: plugin_root is required and was not supplied.\n' +
+  'Without it this run cannot register with the commit gate, so nothing would be gated, ' +
+  'sealed, or guarded by the Stop hook — the run would look supervised and be unsupervised.\n' +
+  'Pass the plugin install path, e.g.\n' +
+  '  {"run_id": "...", "plugin_root": "/path/to/atomic-cc"}\n' +
+  'The SessionStart notice prints the exact path for this session; `claude plugin list` also shows it.')
+// PLUGIN_ROOT is guaranteed non-empty by the fail-closed check above, so this
+// never returns null: there is no ungated mode left for a reader to infer.
+const runStateCmd = (sub) => `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}`
 // The transition is issued by the scribe (transcribe-and-run, never author) so
 // no write-capable agent is ever handed the gate.
 async function runState(sub, label) {
   const cmd = runStateCmd(sub)
-  if (!cmd) { log(`atomic tournament: no plugin_root — gate registration skipped (${sub})`); return }
   await agent(
     `Run the following command EXACTLY as written, once, and report its output verbatim.
 Write no files and modify nothing.
@@ -129,7 +143,11 @@ if (seeds.length < 2) {
   await runState(`seal ${A.run_id} failed false`, 'gate:seal')
   return { status: 'failed', winner: null,
            bracket_path: null,
-           attempts: seeds.map(i => ({ index: i, path: attemptPath(i) })) }
+           attempts: seeds.map(i => ({ index: i, path: attemptPath(i) })),
+           bracket_integrity: { degraded: true, attempts_requested: NUM_ATTEMPTS,
+             attempts_entered: seeds.length, walkovers,
+             matches_decided_by_judgment: 0, matches_decided_by_fallback: 0, judge_errors: [],
+             upstream_divergence: 'Upstream Atomic runs attempts under failFast and would have failed on the first dead attempt; this port collected the survivors first and then found too few to seed a bracket.' } }
 }
 log(`atomic tournament: ${seeds.length}/${NUM_ATTEMPTS} attempts survived; walkovers: [${walkovers.join(', ')}]`)
 
@@ -209,6 +227,21 @@ while (entrants.length > 1) {
 }
 const champion = entrants[0]
 
+// Audit finding F11. Upstream runs attempts and judges under failFast, so a dead
+// attempt or a dead judge aborts the whole run; this port continues (walkover for
+// a dead attempt, lower-index-advances for a judge that died twice) because the
+// workflow sandbox has no way to retry a stage the way the upstream runtime does.
+// That is a genuine divergence, and the auditor's objection was not that it
+// exists but that it was INVISIBLE: a caller reading `winner` could not tell a
+// bracket decided by judgment from one decided by an index comparison. It is
+// reported now, in the return value, in the log, and in bracket.json.
+const judgeErrors = matches.filter(m => m.judge_error)
+  .map(m => ({ round: m.round, match: m.match, first: m.first, second: m.second, advanced: m.winner }))
+const decidedByJudgment = matches.length - judgeErrors.length
+if (judgeErrors.length > 0)
+  log(`atomic tournament: ${judgeErrors.length}/${matches.length} match(es) had no surviving judge — ` +
+      `the lower attempt index advanced by rule, not by judgment. Upstream would have failed the run.`)
+
 phase('Record')
 // Upstream bracket.json shape: { task, matches, byes, winner }. run_id,
 // num_attempts, seeds, and walkovers are CC extensions (upstream failFast
@@ -219,6 +252,7 @@ const bracket = {
   num_attempts: NUM_ATTEMPTS,
   seeds,
   walkovers,
+  judge_errors: judgeErrors,
   matches,
   byes,
   winner: { index: champion, path: attemptPath(champion) },
@@ -265,4 +299,19 @@ return {
   result_path: WINNER_MD,
   bracket_path: BRACKET_PATH,
   attempts: seeds.map(i => ({ index: i, path: attemptPath(i) })),
+  // F11 disclosure: `degraded` is true whenever some part of this bracket was
+  // decided by a fallback rule rather than by a judge or an entrant. Read it
+  // before treating `winner` as "the best of N".
+  bracket_integrity: {
+    degraded: walkovers.length > 0 || judgeErrors.length > 0,
+    attempts_requested: NUM_ATTEMPTS,
+    attempts_entered: seeds.length,
+    walkovers,
+    matches_decided_by_judgment: decidedByJudgment,
+    matches_decided_by_fallback: judgeErrors.length,
+    judge_errors: judgeErrors,
+    upstream_divergence: (walkovers.length > 0 || judgeErrors.length > 0)
+      ? 'Upstream Atomic runs attempts and judges under failFast and would have failed this run instead of completing it. This port continued and recorded the substitution.'
+      : null,
+  },
 }

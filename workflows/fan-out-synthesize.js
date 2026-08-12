@@ -59,10 +59,24 @@ const ARTIFACT_DIR = `.atomic-cc/runs/${A.run_id}/fan-out`
 // command is issued by the scribe (transcribe-and-run, never author), so no
 // write-capable agent is handed the gate.
 const PLUGIN_ROOT = typeof A.plugin_root === 'string' ? A.plugin_root.trim() : ''
-const runStateCmd = (sub) => PLUGIN_ROOT ? `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}` : null
+// F10 (independent audit, 2026-08-12): the gate used to be OPT-IN. Every gating
+// path in this file is conditional on plugin_root, and plugin_root appeared in no
+// usage example anywhere in the docs — so a user who followed the documentation
+// got no registration, no commit gate, no seal and no stop guard, while the docs
+// asserted the opposite. It now fails CLOSED: a run that cannot register refuses
+// to start rather than running ungated while claiming to be gated.
+if (!PLUGIN_ROOT) throw new Error(
+  'atomic: plugin_root is required and was not supplied.\n' +
+  'Without it this run cannot register with the commit gate, so nothing would be gated, ' +
+  'sealed, or guarded by the Stop hook — the run would look supervised and be unsupervised.\n' +
+  'Pass the plugin install path, e.g.\n' +
+  '  {"run_id": "...", "plugin_root": "/path/to/atomic-cc"}\n' +
+  'The SessionStart notice prints the exact path for this session; `claude plugin list` also shows it.')
+// PLUGIN_ROOT is guaranteed non-empty by the fail-closed check above, so this
+// never returns null: there is no ungated mode left for a reader to infer.
+const runStateCmd = (sub) => `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}`
 async function runState(sub, label) {
   const cmd = runStateCmd(sub)
-  if (!cmd) { log(`atomic fan-out: no plugin_root — gate registration skipped (${sub})`); return }
   await agent(
     `Run the following command EXACTLY as written, once, and report its output verbatim.
 Write no files and modify nothing.

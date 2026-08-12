@@ -95,10 +95,25 @@ const MAX_LOOPS = positiveInteger(A.max_loops, DEFAULT_MAX_LOOPS)
 const BASE_BRANCH = normalizeBranchInput(A.base_branch, 'origin/main')
 const CREATE_PR = A.create_pr === true
 const PLUGIN_ROOT = typeof A.plugin_root === 'string' ? A.plugin_root.trim() : ''
+// F10 (independent audit, 2026-08-12): the gate used to be OPT-IN. Every gating
+// path in this file is conditional on plugin_root, and plugin_root appeared in no
+// usage example anywhere in the docs — so a user who followed the documentation
+// got no registration, no commit gate, no seal and no stop guard, while the docs
+// asserted the opposite. It now fails CLOSED: a run that cannot register refuses
+// to start rather than running ungated while claiming to be gated.
+if (!PLUGIN_ROOT) throw new Error(
+  'atomic: plugin_root is required and was not supplied.\n' +
+  'Without it this run cannot register with the commit gate, so nothing would be gated, ' +
+  'sealed, or guarded by the Stop hook — the run would look supervised and be unsupervised.\n' +
+  'Pass the plugin install path, e.g.\n' +
+  '  {"run_id": "...", "plugin_root": "/path/to/atomic-cc"}\n' +
+  'The SessionStart notice prints the exact path for this session; `claude plugin list` also shows it.')
 const RUN_DIR = `.atomic-cc/runs/${A.run_id}`
 const NOTES_PATH = `${RUN_DIR}/implementation-notes.md`
 
-const runStateCmd = (sub) => PLUGIN_ROOT ? `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}` : null
+// PLUGIN_ROOT is guaranteed non-empty by the fail-closed check above, so this
+// never returns null: there is no ungated mode left for a reader to infer.
+const runStateCmd = (sub) => `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}`
 
 // Upstream defaultResearchPath: research/<YYYY-MM-DD>-<slug>.md. Date.now() is
 // unavailable in workflow scripts, so the run id replaces the date component —
@@ -387,9 +402,7 @@ function renderImplementationPrompt({ iteration, latestReviewRoundPath, blockers
       'Record the acceptance matrix, implementation decisions, research deviations, tradeoffs, blockers, validation outcomes, and user-relevant facts. Exclude secrets, credentials, and tokens.',
     ].join('\n')],
     ['run_state', iteration === 1
-      ? (beginCmd
-        ? `First action: register the run with the commit gate by running exactly:\n${beginCmd}\nNever Write or Edit .atomic-cc/run-state.json or approval.json directly — a hook denies it, and the CLI is the only channel.`
-        : 'plugin_root was not provided, so skip gate registration and note "run-state registration skipped (no plugin_root)" in your report.')
+      ? `First action: register the run with the commit gate by running exactly:\n${beginCmd}\nNever Write or Edit .atomic-cc/run-state.json or approval.json directly — a hook denies it, and the CLI is the only channel.`
       : 'The run is already registered with the commit gate.'],
     ['constraints', [
       'Do not git commit or git push: commits are gated until the review gate seals approval. The finalize stage handles delivery.',

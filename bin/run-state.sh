@@ -26,17 +26,25 @@ set -u
 
 die() { echo "atomic-cc run-state: $*" >&2; exit 1; }
 
-# Resolve the project root: prefer the git toplevel, else walk up looking for
-# an existing .atomic-cc, else use PWD. This keeps state in one place even when
-# commands run from a subdirectory.
+# Resolve the project root.
+#
+# Audit finding F6: this used to prefer `git rev-parse --show-toplevel` while the
+# hooks anchored at CLAUDE_PROJECT_DIR. In a monorepo with nested repos, a
+# submodule, a worktree, or a session opened one level above the repo, the two
+# disagreed: state was registered where the hooks never looked, so the gate was
+# inert for the whole run and nothing warned. Order now: an EXISTING .atomic-cc
+# up the tree (so a second state directory is never created alongside a live
+# one), then CLAUDE_PROJECT_DIR, then the git toplevel, then PWD.
 resolve_root() {
-  local top
-  top=$(git rev-parse --show-toplevel 2>/dev/null) && { printf '%s' "$top"; return; }
-  local dir="$PWD"
-  while [ "$dir" != "/" ]; do
+  local dir="$PWD" top
+  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
     if [ -d "$dir/.atomic-cc" ]; then printf '%s' "$dir"; return; fi
     dir=$(dirname "$dir")
   done
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
+    printf '%s' "$CLAUDE_PROJECT_DIR"; return
+  fi
+  top=$(git rev-parse --show-toplevel 2>/dev/null) && { printf '%s' "$top"; return; }
   printf '%s' "$PWD"
 }
 
@@ -84,10 +92,28 @@ case "$cmd" in
     # leaving the run in_progress with the commit gate shut. Nothing needed it:
     # reducer decisions are composed in the workflow's JavaScript and transcribed
     # to decision.json by the scribe.
+    # Audit finding F3: `seal <id> complete true` is allowlisted by the Bash gate
+    # and used to validate only the SHAPE of its arguments — so one permitted
+    # command minted a gate-opening approval for a run that had never been
+    # registered and had no review on disk. An approval now requires the review
+    # record it claims to summarise. This does not make the channel trustworthy
+    # (an agent that produced review files can still seal); it makes an approval
+    # impossible without the artifacts an auditor would ask to see.
+    if [ "$APPROVED" = "true" ]; then
+      EV_COUNT=0
+      for f in "$STATE_DIR/runs/$RUN"/review-*.json \
+               "$STATE_DIR/runs/$RUN"/*/review-*.json \
+               "$STATE_DIR/runs/$RUN"/verification-*.json \
+               "$STATE_DIR/runs/$RUN"/decision.json; do
+        [ -f "$f" ] && EV_COUNT=$((EV_COUNT+1))
+      done
+      [ "$EV_COUNT" -gt 0 ] || die "seal: refusing approved=true for run \"$RUN\" — no review record exists under $STATE_DIR/runs/$RUN (expected review-*.json, verification-*.json or decision.json). An approval must be able to point at the review it summarises. Seal approved=false, or use \`approve\` for an explicit human override."
+    fi
     printf '{"active_run": "%s", "status": "%s", "sealed_at": "%s"}\n' "$RUN" "$STATUS" "$TS" > "$STATE" \
       || die "seal: cannot write $STATE"
     if [ "$APPROVED" = "true" ]; then
-      printf '{"approved": true, "human": false, "run_id": "%s", "sealed_at": "%s"}\n' "$RUN" "$TS" \
+      printf '{"approved": true, "human": false, "run_id": "%s", "sealed_at": "%s", "channel": "reducer-seal", "evidence_files": %s}\n' \
+        "$RUN" "$TS" "$EV_COUNT" \
         > "$STATE_DIR/runs/$RUN/approval.json" || die "seal: cannot write approval.json"
     fi
     rm -f "$STATE_DIR/.state/stop-blocks-$RUN" 2>/dev/null
@@ -96,9 +122,21 @@ case "$cmd" in
   approve)
     RUN="${2:-}"; valid_run_id "$RUN" || die "approve: run_id must match [A-Za-z0-9._-]{1,64}"
     [ -d "$STATE_DIR/runs/$RUN" ] || die "approve: unknown run \"$RUN\" (no $STATE_DIR/runs/$RUN)"
-    printf '{"approved": true, "human": true, "run_id": "%s", "sealed_at": "%s"}\n' "$RUN" "$TS" \
+    # Audit finding F3: this wrote "human": true unconditionally, so an agent that
+    # ran `approve` — a command the Bash gate allowlists — produced an audit record
+    # asserting a human sign-off that never happened. The field is now DERIVED, not
+    # assumed: a human at a terminal has a tty; an agent's Bash tool does not. When
+    # we cannot tell, the record says so instead of claiming a person.
+    if [ -t 0 ] || [ -t 1 ]; then HUMAN=true; CHANNEL="interactive-tty"
+    else HUMAN=false; CHANNEL="non-interactive (no tty: invoked by a tool or script, not verifiably by a person)"; fi
+    printf '{"approved": true, "human": %s, "channel": "%s", "run_id": "%s", "sealed_at": "%s"}\n' \
+      "$HUMAN" "$CHANNEL" "$RUN" "$TS" \
       > "$STATE_DIR/runs/$RUN/approval.json" || die "approve: cannot write approval.json"
-    echo "atomic-cc: run \"$RUN\" approved by human"
+    if [ "$HUMAN" = "true" ]; then
+      echo "atomic-cc: run \"$RUN\" approved by human (interactive terminal)"
+    else
+      echo "atomic-cc: run \"$RUN\" approved, recorded as human=false — this invocation had no terminal attached, so it cannot be attributed to a person. The commit gate opens either way; the audit trail states what it can actually establish."
+    fi
     ;;
   clear)
     rm -f "$STATE" "$STATE_DIR"/.state/stop-blocks-* 2>/dev/null

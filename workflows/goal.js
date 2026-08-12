@@ -76,12 +76,25 @@ const BLOCKER_THRESHOLD = Math.min(3, MAX_TURNS)  // upstream: min(DEFAULT_BLOCK
 const BASE_BRANCH = normalizeBranchInput(A.base_branch, 'origin/main')
 const CREATE_PR = A.create_pr === true
 const PLUGIN_ROOT = typeof A.plugin_root === 'string' ? A.plugin_root.trim() : ''
+// F10 (independent audit, 2026-08-12): the gate used to be OPT-IN. Every gating
+// path in this file is conditional on plugin_root, and plugin_root appeared in no
+// usage example anywhere in the docs — so a user who followed the documentation
+// got no registration, no commit gate, no seal and no stop guard, while the docs
+// asserted the opposite. It now fails CLOSED: a run that cannot register refuses
+// to start rather than running ungated while claiming to be gated.
+if (!PLUGIN_ROOT) throw new Error(
+  'atomic: plugin_root is required and was not supplied.\n' +
+  'Without it this run cannot register with the commit gate, so nothing would be gated, ' +
+  'sealed, or guarded by the Stop hook — the run would look supervised and be unsupervised.\n' +
+  'Pass the plugin install path, e.g.\n' +
+  '  {"run_id": "...", "plugin_root": "/path/to/atomic-cc"}\n' +
+  'The SessionStart notice prints the exact path for this session; `claude plugin list` also shows it.')
 const RUN_DIR = `.atomic-cc/runs/${A.run_id}`
 const LEDGER_PATH = `${RUN_DIR}/goal-ledger.json`
 
-const runStateCmd = (sub) => PLUGIN_ROOT
-  ? `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}`
-  : null
+// PLUGIN_ROOT is guaranteed non-empty by the fail-closed check above, so this
+// never returns null: there is no ungated mode left for a reader to infer.
+const runStateCmd = (sub) => `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}`
 
 // ---- shared prompt contracts, ported from upstream shared-prompts.ts -------
 const tagged = (sections) => sections
@@ -496,9 +509,7 @@ function renderWorkerPrompt({ turn, latestReviewRoundPath, consolidatedBlockers,
     ['project_setup', WORKER_PREFLIGHT_CONTRACT],
     ['goal_guidelines', GOAL_CONTINUATION_REFERENCE],
     ['run_state', turn === 1
-      ? (beginCmd
-        ? `First action: register the run with the gate by running exactly:\n${beginCmd}\nDo not Write run-state files directly; a hook denies it.`
-        : 'plugin_root was not provided, so skip gate registration and note that in your receipt.')
+      ? `First action: register the run with the gate by running exactly:\n${beginCmd}\nDo not Write run-state files directly; a hook denies it.`
       : 'The run is already registered with the gate.'],
     ['constraints', [
       'Do not git commit or git push: commits are gated until the reducer seals approval (CC adaptation of the upstream receipt contract — the commit happens in the finalize stage).',
@@ -587,9 +598,21 @@ for (let turn = 1; turn <= MAX_TURNS && ledger.status === 'active'; turn += 1) {
       label: `verify:t${turn}:${persona.name}`, phase: 'Verify',
     })))
 
-  // A crashed reviewer NEVER cancels a reached quorum: synthesize the upstream
-  // reviewerErrorDecision so the round always has 3 records — quorum counts
-  // approvals, not arrivals.
+  // Audit finding F4 — CORRECTED. The previous version synthesized a
+  // non-approving record for a DEAD reviewer and let the survivors satisfy the
+  // 2-of-3 quorum, and justified it as upstream behaviour. That was wrong in a
+  // way that mattered: upstream runs reviewers under
+  // `ctx.parallel(..., { failFast: true })` (goal-runner.ts), and the batch
+  // REJECTS on the first stage failure — the runner then forces
+  // status = "needs_human" and breaks. Upstream's reviewerErrorDecision
+  // synthesis (goal-review.ts) is for a reviewer that RETURNED something
+  // unparseable inside a batch that completed, which is a different event.
+  // So: a reviewer that returns nothing at all now ends the turn as needs_human,
+  // matching upstream's fail-closed direction. A user promised "2 of 3
+  // independent review" must never silently receive 2 of 2.
+  const deadReviewers = results
+    .map((r, i) => (r === null ? REVIEWER_PERSONAS[i].name : null)).filter(Boolean)
+
   latestReviews = results.map((decision, i) => {
     const reviewer = REVIEWER_PERSONAS[i].name
     if (decision === null) {
@@ -602,11 +625,16 @@ for (let turn = 1; turn <= MAX_TURNS && ledger.status === 'active'; turn += 1) {
   ledger.reviews.push(...latestReviews)
   lifecycleEvent('reviews_recorded', `Recorded ${latestReviews.length} reviewer decisions.`, turn)
 
-  if (results.every(r => r === null)) { // upstream: reviewer batch failure -> needs_human
+  // Upstream: ANY reviewer stage failure rejects the whole batch and forces
+  // needs_human. Not just a total wipeout — one death is enough, because a
+  // quorum of 2 drawn from fewer than 3 arrivals is not the gate the caller
+  // asked for. Fail-closed, matching goal-runner.ts.
+  if (deadReviewers.length > 0) {
     terminalRemainingWork = collectRemainingWork(latestReviews)
-    const reason = `Reviewer execution failed before quorum could be established. Remaining work: ${terminalRemainingWork}`
+    const reason = `Reviewer execution failed before quorum could be established: ${deadReviewers.join(', ')} returned no schema-valid decision (${deadReviewers.length} of ${REVIEWER_PERSONAS.length}). Upstream rejects the whole review batch on any reviewer failure rather than letting the survivors form a quorum, so this run needs a human. Remaining work: ${terminalRemainingWork}`
     ledger.decisions.push({ turn, decision: 'needs_human', reason,
-      complete_votes: 0, review_quorum: REVIEW_QUORUM })
+      complete_votes: 0, review_quorum: REVIEW_QUORUM,
+      dead_reviewers: deadReviewers, reviewers_expected: REVIEWER_PERSONAS.length })
     ledger.status = 'needs_human'
     lifecycleEvent('status_decided', reason, turn)
     break

@@ -12,12 +12,33 @@ Atomic by Bastani:
     https://github.com/bastani-inc/atomic   (MIT License)
     https://docs.bastani.ai
 
-It bundles NO Atomic code. The convergence rules implemented here were
-re-derived from the published upstream sources — `review-convergence.ts`,
-`goal-reducer.ts`, `ralph-review-gate.ts`, `goal-schemas.ts`,
-`adversarial-verification-runner.ts` — and from the official documentation, then
-rewritten from scratch against Claude Code's own plugin primitives (dynamic
-workflows, subagents, skills, hooks).
+WHAT IS AND IS NOT COPIED — corrected 2026-08-12.
+
+Earlier versions of this file stated "It bundles NO Atomic code." That was
+inaccurate and is withdrawn. An independent audit measured **88 normalised lines
+of 60 characters or more that are byte-identical to upstream** — 52 in
+`workflows/goal.js`, 33 in `workflows/ralph.js`, 3 in `workflows/tournament.js`
+— and the measurement is a floor, not a ceiling: only `workflows/*.js` was
+measured, and the agent charters under `agents/` are ports of upstream charters
+too.
+
+What is copied, deliberately: **prompt text**. The stage contracts, the reviewer
+persona role/focus strings, and the behavioural clauses in
+`packages/workflows/builtin/shared-prompts.ts` and the goal/ralph runners are
+reproduced verbatim, because in this system the prompt IS the specification —
+paraphrasing a review contract changes what reviewers check, which is exactly the
+drift this port exists to avoid.
+
+What is re-derived rather than copied: the executable logic. Upstream is
+TypeScript running in its own runtime; the reducers here are JavaScript running
+in Claude Code's workflow sandbox (`goal-reducer.ts`, `ralph-review-gate.ts`,
+`review-convergence.ts`, `goal-schemas.ts`,
+`adversarial-verification-runner.ts` → `workflows/*.js`). The rules are
+faithful; the code is not a transliteration.
+
+Both are permitted by upstream's MIT licence, which asks in return that its
+copyright notice travel with substantial portions. It now does — see the
+copyright line above and in LICENSE.
 
 Full credit for the underlying design — the stop_review_loop approval contract,
 the quorum reducer, the finding-blocking classification, the blocker-threshold

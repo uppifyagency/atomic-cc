@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Single-plugin marketplace for atomic-cc: verifiable agent workflows as a native Claude Code plugin.",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "atomic",
       "source": "./",
-      "description": "Verifiable agent workflows for Claude Code: schema-validated stages, fresh-context adversarial verification, deterministic quorum reducers, real-command evidence logs, and a gated commit path. Independent port of Atomic (bastani-inc, MIT) \u2014 9 workflows (every upstream builtin), 11 subagents, 12 slash commands, 6 hooks, 537 tests, with upstream drift detection.",
-      "version": "0.3.0",
+      "description": "Verifiable agent workflows for Claude Code: schema-validated stages, fresh-context adversarial verification, deterministic quorum reducers, real-command evidence logs, and a gated commit path. Independent port of Atomic (bastani-inc, MIT) \u2014 9 workflows (every upstream builtin), 11 subagents, 12 slash commands, 7 hooks, 657 tests, with upstream drift detection.",
+      "version": "0.4.0",
       "author": {
         "name": "Vlad Vrinceanu"
       },

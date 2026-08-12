@@ -30,6 +30,19 @@ if (!A.prompt) throw new Error('atomic: prompt required')
 const MAX_ITERATIONS = Math.min(Math.max(A.max_iterations ?? 5, 1), 20) // Atomic default 5, bounds 1-20
 const PLUGIN_ROOT = typeof A.plugin_root === 'string' && A.plugin_root.trim()
   ? A.plugin_root.trim() : null
+// F10 (independent audit, 2026-08-12): the gate used to be OPT-IN. Every gating
+// path in this file is conditional on plugin_root, and plugin_root appeared in no
+// usage example anywhere in the docs — so a user who followed the documentation
+// got no registration, no commit gate, no seal and no stop guard, while the docs
+// asserted the opposite. It now fails CLOSED: a run that cannot register refuses
+// to start rather than running ungated while claiming to be gated.
+if (!PLUGIN_ROOT) throw new Error(
+  'atomic: plugin_root is required and was not supplied.\n' +
+  'Without it this run cannot register with the commit gate, so nothing would be gated, ' +
+  'sealed, or guarded by the Stop hook — the run would look supervised and be unsupervised.\n' +
+  'Pass the plugin install path, e.g.\n' +
+  '  {"run_id": "...", "plugin_root": "/path/to/atomic-cc"}\n' +
+  'The SessionStart notice prints the exact path for this session; `claude plugin list` also shows it.')
 
 const DIR = `.atomic-cc/runs/${A.run_id}`
 const LEDGER_PATH = `${DIR}/progress-ledger.json`
@@ -65,17 +78,11 @@ const ledgerJson = status => JSON.stringify({
 
 // This workflow's iteration workers mutate the repository, so the run is
 // registered with the approval gate via the plugin CLI on the first mutating stage.
-const BEGIN = PLUGIN_ROOT
-  ? `FIRST, before any other action, run this exact shell command to register the run with the approval gate:
+const BEGIN = `FIRST, before any other action, run this exact shell command to register the run with the approval gate:
 "${PLUGIN_ROOT}/bin/run-state.sh" begin ${A.run_id}
 Never Write/Edit .atomic-cc/run-state.json or approval.json directly — a hook denies those writes; the CLI is the only channel.`
-  : `No plugin_root was provided: SKIP run-state registration entirely (do NOT create .atomic-cc/run-state.json), and mention "run-state registration skipped (no plugin_root)" in your report.`
 
 async function sealStage(status, approved) {
-  if (!PLUGIN_ROOT) {
-    log(`atomic loop-until-done: no plugin_root — run-state seal (${status}) skipped`)
-    return
-  }
   await agent(
     `Atomic run "${A.run_id}" ended: status "${status}", approved=${approved}.
 Run this exact shell command and do nothing else:
@@ -174,12 +181,17 @@ Markdown with Outcome, Evidence, Artifacts, Residual risks, and Remaining work (
 Do NOT git commit or push. Return a compact reference to the report.
 Objective: ${A.prompt}`,
       { agentType: 'atomic:worker', label: 'completion-summary' })
-    // approved=true is earned here, unlike in classify-and-act: the loop only
-    // reaches this branch when an independent evaluator that did none of the work
-    // returned done=true against the evidence. It is a single-reviewer gate, not
-    // goal's quorum of two, so it is the weakest approval the plugin issues —
-    // /atomic:goal remains the workflow to use when the review must be adversarial.
-    await sealStage('complete', true)
+    // Audit finding F8 — CORRECTED to approved=false. Upstream's
+    // loop-until-done-runner.ts has no approval concept at all: its terminal
+    // states are complete and failed, and it never opens a commit gate. Minting a
+    // gate-opening approval from one evaluator's `done` boolean was a capability
+    // this port INVENTED, in the workflow a user reaches for precisely because it
+    // is the cheapest — while the marketplace copy advertised "deterministic
+    // quorum reducers". An independent evaluator is a real signal and it is
+    // recorded in the ledger; it is not a review quorum, so it does not certify.
+    // Use /atomic:goal or /atomic:adversarial-verification when the result must
+    // carry an approval, or /atomic:approve to sign off yourself.
+    await sealStage('complete', false)
     return { result: String(final ?? `Complete. See ${RESULT_PATH}.`).slice(0, 2000),
              status: 'complete', iterations_completed: iteration,
              ledger_path: LEDGER_PATH,
@@ -198,10 +210,8 @@ await agent(
   `Atomic run "${A.run_id}" exhausted its iteration budget (${MAX_ITERATIONS} iterations).
 1. Write EXACTLY this JSON to ${LEDGER_PATH} (overwrite the existing file) and touch no other file:
 ${ledgerJson('failed')}
-${PLUGIN_ROOT
-    ? `2. Then run this exact shell command:
-"${PLUGIN_ROOT}/bin/run-state.sh" seal ${A.run_id} failed false`
-    : '2. No plugin_root was provided: skip run-state sealing and mention that in your receipt.'}
+2. Then run this exact shell command:
+"${PLUGIN_ROOT}/bin/run-state.sh" seal ${A.run_id} failed false
 Never Write/Edit .atomic-cc/run-state.json or approval.json directly — the CLI is the only channel. Do NOT git commit or push.`,
   { agentType: 'atomic:scribe', label: 'finalize-failed' })
 

@@ -3,6 +3,132 @@
 All notable changes to atomic-cc. Versions follow semver; the port's upstream
 sync point is recorded in [`upstream.lock`](upstream.lock).
 
+## 0.4.0 — 2026-08-12
+
+Audit-response release. A second independent audit — run against v0.3.0 at
+`19e1749`, comparing it to upstream `bastani-inc/atomic` @ `9c8b6d8` — refuted
+the "1:1 replica, fully functional" claim and named fourteen findings. It could
+not falsify the reducer arithmetic, the finding-blocking classification, the hard
+guards, the gate constants, or the test harness itself; everything it did break
+is fixed or disclosed below. Nothing in this release is a claim the tests do not
+hold up.
+
+### Fixed — the gate was effectively off
+
+- **`plugin_root` is now required, and every workflow fails closed without it**
+  (F10). It was optional, and it appeared in **no usage example anywhere** — so a
+  user who followed the documentation got a run with the commit gate, the seal
+  and the Stop guard all inert while the docs promised supervision. Nine
+  workflows now refuse to start before spawning anything, the error says what is
+  missing and where to find it, a `SessionStart` hook prints the value every
+  session, and the README documents it as a required argument. Every "skip the
+  gate" branch has been deleted rather than left as dead code an agent could be
+  told to take.
+- **A crashed reviewer no longer fails open** (F4). `goal` counted a quorum of 2
+  out of however many reviewers survived, so one dead reviewer silently turned
+  2-of-3 review into 2-of-2. Upstream runs reviewers under
+  `ctx.parallel(…, { failFast: true })`: any reviewer stage death rejects the
+  batch and forces `needs_human`. It now does the same. The port's own test had
+  asserted the fail-open behaviour and cited upstream as its authority — that
+  test was wrong and has been inverted with the correct citation.
+- **`loop-until-done` no longer mints an approval** (F8). It sealed
+  `approved=true` on one evaluator's `done: true`, releasing the commit gate on a
+  non-quorum judgement upstream has no approval concept for at all. It seals
+  `complete false`; the evaluator's independence is kept, the certification it
+  cannot support is gone.
+
+### Fixed — bypasses the gate hooks did not see
+
+Each of these was reproduced by the auditor against v0.3.0 and is now covered by
+a test that replays it:
+
+- `cd .atomic-cc/runs/<id> && printf … > approval.json` — a `cd` into the state
+  directory is denied outright, because once the shell is inside it every
+  redirection is a bare filename no matcher can attribute (F1).
+- `printf … > ./.atomic-cc//runs/<id>/approval.json` — paths are normalised
+  before matching (F1).
+- `D=.atomic-cc/runs/x; printf … > $D/approval.json` — the matcher now looks for
+  the state directory and a write operator anywhere in the command (F1).
+- `rm -rf .atomic-cc`, `mv .atomic-cc .atomic-cc-off` — destroying the audit
+  trail is a write (F1).
+- `echo 3 > .atomic-cc/.state/stop-blocks-<run>` — pre-spending the Stop guard's
+  own counter (F2).
+- `git 'commit'`, `git c'ommit'` — each character may be individually quoted (F12).
+- `git merge/revert/rebase/tag/notes/apply/update-ref/commit-tree/stash`,
+  `gh pr ready`, `glab mr create`, `hub pull-request`, `sl`, `hg` — the matcher
+  covered `commit`/`push` and little else (F12).
+- **Duty 2 is reachable without `jq`** (F7). The degraded branch exited before
+  the state-protection check, so on a machine without `jq` an agent could forge
+  `approval.json` and the gate would honour it once `jq` returned. Both duties now
+  run `jq`-free.
+- **The hooks and the CLI now resolve the project root the same way** (F6). The
+  hooks anchored at `CLAUDE_PROJECT_DIR`; the CLI at the git toplevel of the
+  caller's cwd. In a monorepo, a submodule, or a session opened one directory
+  above the repo they disagreed and the gate was inert for whole runs with no
+  adversarial intent at all. All three consumers share one ordered candidate
+  list, and each checks every candidate.
+- **An approval must point at a review** (F3, partial). `seal … true` is refused
+  unless a review, verification or decision record exists for that run, and
+  `approve` no longer writes `human: true` when it cannot see a tty — it records
+  the channel it was actually invoked through. This does **not** close F3: an
+  agent holding `Bash` can still call the CLI. That is now stated in the README,
+  in the landing page and in the hook's own header instead of implied away.
+
+### Fixed — divergences that were real but invisible
+
+- **`tournament` discloses its fallbacks** (F11). Upstream aborts on a dead
+  attempt or a dead judge; this port substitutes a walkover and
+  "lower index advances", because a sandboxed workflow cannot retry a stage the
+  way the upstream runtime can. The divergence stays, but a caller reading
+  `winner` could not tell judgment from an index comparison. Every exit now
+  returns `bracket_integrity` — `degraded`, the walkovers, how many matches were
+  decided by judgment versus fallback, and a sentence naming what upstream would
+  have done instead.
+- **`adversarial-verification` persists every verification round** (F13). The
+  per-verifier reports existed only inside the reducer's prompt; the only durable
+  record of a round was the reducer's own conclusion — the one artifact an auditor
+  most needs to check against its inputs. Each round is now written to
+  `verification-r<n>.json` **before** reducing, naming any verifier that returned
+  nothing, and it doubles as the review evidence `seal … true` requires.
+
+### Fixed — attribution
+
+- **`NOTICE` no longer claims "It bundles NO Atomic code"** (F5). The auditor
+  measured 88 normalised lines of ≥60 characters byte-identical to upstream (52
+  in `goal.js`, 33 in `ralph.js`, 3 in `tournament.js`), and that is a floor —
+  only `workflows/*.js` was measured. `NOTICE` now explains what is copied
+  deliberately (prompt text, because here the prompt *is* the specification) and
+  what is re-derived (the executable logic), and `LICENSE` carries the Bastani
+  copyright line MIT asks for.
+
+### Fixed — published counts
+
+- **Every documented count and version is pinned by a test** (F14). The landing
+  page carried `0.2.0` in five places through a release that had shipped `0.3.0`,
+  and the workflow/agent/hook counts disagreed between the README, the landing
+  page and the marketplace description. The suite now derives each count from the
+  tree and fails on drift, including the assertion count in the badge.
+
+### Tests
+
+- **657 assertions** (up from 537), four suites, all passing. New coverage:
+  every reproduced bypass above; every workflow refusing without `plugin_root`
+  and spawning nothing first; `tournament`'s degraded-bracket disclosure on three
+  paths (walkover, judgeless, clean); `adversarial-verification`'s round
+  persistence including a dead verifier; and a check that the landing page's
+  own examples are de-tagged before matching, because the previous check silently
+  matched nothing and passed.
+
+### Still open, and stated as such
+
+- **F3 cannot be closed by a regex.** An agent with `Bash` can invoke
+  `run-state.sh`. The evidence requirement raises the cost; it is not a boundary.
+- **No live end-to-end run has been executed.** The workflows are driven against
+  mocked agents. That is real behavioural testing of the scripts, not proof of a
+  production run.
+- **Upstream's runtime packages and skills layer are not ported**, by design —
+  see the declared divergences in the README.
+
 ## 0.3.0 — 2026-08-12
 
 Fidelity release. An independent audit compared the port line by line against

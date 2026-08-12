@@ -1,7 +1,7 @@
 {
   "name": "atomic",
   "description": "Port of Atomic (bastani-inc) verifiable agent workflows: schema-validated stages, fresh-context adversarial verification, deterministic quorum reducers, evidence logs, and a commit gate whose state transitions run through a validated CLI. Discipline for agents, not a sandbox.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Vlad Vrinceanu"
   },

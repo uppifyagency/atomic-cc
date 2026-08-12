@@ -121,6 +121,8 @@ assert_deny "denies a commit issued from a nested subdirectory" \
 group "approval gate: run lifecycle"
 setup; (cd "$WORK" && "$BIN/run-state.sh" begin g1 >/dev/null)
 assert_deny "an in_progress unapproved run gates commits" "$(bash_hook "git commit -m x" "$WORK")"
+# F3: an approval must be able to point at the review it summarises.
+mkdir -p "$WORK/.atomic-cc/runs/g1/turn-1"; echo '{}' > "$WORK/.atomic-cc/runs/g1/turn-1/review-a.json"
 (cd "$WORK" && "$BIN/run-state.sh" seal g1 complete true >/dev/null)
 assert_allow "a sealed+approved run stops gating" "$(bash_hook "git commit -m x" "$WORK")"
 
@@ -134,11 +136,95 @@ setup; (cd "$WORK" && "$BIN/run-state.sh" begin g3 >/dev/null)
 assert_allow "clear releases a stale run" "$(bash_hook "git commit -m x" "$WORK")"
 
 setup; (cd "$WORK" && "$BIN/run-state.sh" begin g4 >/dev/null)
-(cd "$WORK" && "$BIN/run-state.sh" approve g4 >/dev/null)
+(cd "$WORK" && "$BIN/run-state.sh" approve g4 </dev/null >/dev/null)
 assert_allow "human approval opens the gate" "$(bash_hook "git commit -m x" "$WORK")"
-if grep -q '"human": true' "$WORK/.atomic-cc/runs/g4/approval.json"; then
-  pass "human approval is recorded as human"
-else fail "human approval is recorded as human"; fi
+# F3: provenance is derived, not asserted. This call has no tty, so the record
+# must NOT claim a person — that is the fix, and the old assertion was the bug.
+if grep -q '"human": false' "$WORK/.atomic-cc/runs/g4/approval.json"; then
+  pass "an approval with no terminal is not recorded as human"
+else fail "an approval with no terminal is not recorded as human"; fi
+
+group "audit 2026-08-12: every reproduced bypass (F1, F2, F12)"
+# Each of these was executed against v0.3.0 by an independent auditor and ALLOWED.
+# None is in the sh -c/eval class the docs disclosed. They are the regression set.
+setup; (cd "$WORK" && "$BIN/run-state.sh" begin atk >/dev/null)
+assert_deny "F1 cd into the run dir, then write a bare approval.json" \
+  "$(bash_hook 'cd .atomic-cc/runs/atk && printf "{\"approved\": true}" > approval.json' "$WORK")"
+assert_deny "F1 doubled slash in the path" \
+  "$(bash_hook 'printf x > ./.atomic-cc//runs/atk/approval.json' "$WORK")"
+assert_deny "F1 directory held in a variable" \
+  "$(bash_hook 'D=.atomic-cc/runs/atk; printf x > $D/approval.json' "$WORK")"
+assert_deny "F1 filename held in a variable" \
+  "$(bash_hook 'F=approval.json; printf x > .atomic-cc/runs/atk/$F' "$WORK")"
+assert_deny "F1 delete the whole state directory" "$(bash_hook 'rm -rf .atomic-cc' "$WORK")"
+assert_deny "F1 rename the state directory out of the way" "$(bash_hook 'mv .atomic-cc .atomic-cc-off' "$WORK")"
+assert_deny "F1 tee into the state" "$(bash_hook 'echo x | tee .atomic-cc/run-state.json' "$WORK")"
+assert_deny "F2 pre-spend the Stop-guard counter" \
+  "$(bash_hook 'echo 3 > .atomic-cc/.state/stop-blocks-atk' "$WORK")"
+for c in "git 'commit' -m x" "git c'ommit' -m x" 'git merge --no-ff other' 'git revert HEAD --no-edit' \
+         'git rebase --continue' 'git tag -a v1 -m x' 'git notes add -m x' 'git apply p.diff' \
+         'git stash push' 'glab mr create' 'hub pull-request' 'sl commit -m x' 'jj new' 'gh pr ready'; do
+  assert_deny "F12 $c" "$(bash_hook "$c" "$WORK")"
+done
+# The widened matcher must not start eating ordinary work.
+for c in 'npm test' 'git status' 'git diff --stat' 'git log --oneline -5' 'cat src/index.ts' \
+         'echo hi > notes.md' 'ls .atomic-cc' 'cat .atomic-cc/run-state.json' 'git fetch origin'; do
+  assert_allow "still allows: $c" "$(bash_hook "$c" "$WORK")"
+done
+
+group "audit 2026-08-12: F7 duty 2 is reachable without jq"
+# The degraded branch used to return before the tamper check, so on a machine
+# without jq an agent could forge approval.json and the gate honoured it later.
+setup; (cd "$WORK" && "$BIN/run-state.sh" begin dgx >/dev/null)
+MINBIN="$WORK/.minbin"; mkdir -p "$MINBIN"
+for b in grep sed dirname cat find rm mkdir ls date printf head; do
+  p=$(command -v "$b" 2>/dev/null) && ln -sf "$p" "$MINBIN/$b"
+done   # everything the scripts need, deliberately without jq
+nojq_hook() { printf '{"tool_input":{"command":%s},"cwd":"%s"}' \
+  "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1")" "$2" \
+  | env PATH="$MINBIN" "$BIN/approval-gate.sh"; }
+assert_deny "no jq: still denies a commit" "$(nojq_hook 'git commit -m x' "$WORK")"
+assert_deny "no jq: now also denies forging approval.json" \
+  "$(nojq_hook 'printf x > .atomic-cc/runs/dgx/approval.json' "$WORK")"
+assert_deny "no jq: now also denies deleting the state" "$(nojq_hook 'rm -rf .atomic-cc' "$WORK")"
+
+group "audit 2026-08-12: F3 an approval must point at a review"
+setup; (cd "$WORK" && "$BIN/run-state.sh" begin ev1 >/dev/null)
+if (cd "$WORK" && "$BIN/run-state.sh" seal ev1 complete true >/dev/null 2>&1); then
+  fail "seal approved=true is refused with no review record on disk"
+else pass "seal approved=true is refused with no review record on disk"; fi
+assert_deny "and the gate stays shut" "$(bash_hook "git commit -m x" "$WORK")"
+mkdir -p "$WORK/.atomic-cc/runs/ev1/turn-1"; echo '{}' > "$WORK/.atomic-cc/runs/ev1/turn-1/review-a.json"
+if (cd "$WORK" && "$BIN/run-state.sh" seal ev1 complete true >/dev/null 2>&1); then
+  pass "with a review record the reducer can seal"; else fail "with a review record the reducer can seal"; fi
+if grep -q '"channel": "reducer-seal"' "$WORK/.atomic-cc/runs/ev1/approval.json"; then
+  pass "the approval names its channel"; else fail "the approval names its channel"; fi
+
+group "audit 2026-08-12: F3 approve does not assert a human it cannot see"
+setup; (cd "$WORK" && "$BIN/run-state.sh" begin hu1 >/dev/null); mkdir -p "$WORK/.atomic-cc/runs/hu1"
+(cd "$WORK" && "$BIN/run-state.sh" approve hu1 </dev/null >/dev/null 2>&1)
+if grep -q '"human": false' "$WORK/.atomic-cc/runs/hu1/approval.json"; then
+  pass "a non-interactive approve records human=false"
+else fail "a non-interactive approve records human=false" "$(cat "$WORK/.atomic-cc/runs/hu1/approval.json")"; fi
+if grep -q 'no tty' "$WORK/.atomic-cc/runs/hu1/approval.json"; then
+  pass "and says why"; else fail "and says why"; fi
+assert_allow "the gate still opens (approval is real, its provenance is honest)" \
+  "$(bash_hook "git commit -m x" "$WORK")"
+
+group "audit 2026-08-12: F6 the CLI and the hooks agree on the root"
+# run-state.sh anchored at the git toplevel while the hooks anchored at
+# CLAUDE_PROJECT_DIR; in a monorepo with a nested repo they disagreed and the
+# gate was inert for the whole run.
+setup; mkdir -p "$WORK/pkg/inner" && (cd "$WORK/pkg/inner" && git init -q)
+(cd "$WORK/pkg/inner" && "$BIN/run-state.sh" begin nested >/dev/null 2>&1)
+OUT=$(printf '{"tool_input":{"command":"git commit -m x"},"cwd":"%s"}' "$WORK/pkg/inner" \
+  | env CLAUDE_PROJECT_DIR="$WORK" "$BIN/approval-gate.sh")
+if [ -n "$OUT" ]; then pass "a run in a nested repo is still gated with CLAUDE_PROJECT_DIR above it"
+else fail "a run in a nested repo is still gated with CLAUDE_PROJECT_DIR above it" "gate was inert"; fi
+OUT=$(printf '{"stop_hook_active":false,"cwd":"%s"}' "$WORK/pkg/inner" \
+  | env CLAUDE_PROJECT_DIR="$WORK" "$BIN/stop-guard.sh")
+if [ -n "$OUT" ]; then pass "and the Stop guard sees it too"
+else fail "and the Stop guard sees it too" "run could be silently abandoned"; fi
 
 group "run-state CLI: no subcommand blocks on stdin"
 # Regression: seal used to persist a decision document from stdin whenever stdin
@@ -185,6 +271,7 @@ assert_allow "the gate opens once the holder seals" "$(bash_hook "git commit -m 
 # Terminal state is not a lock: the next run may claim the gate.
 if (cd "$WORK" && "$BIN/run-state.sh" begin nextrun >/dev/null 2>&1); then
   pass "a sealed run does not block the next begin"; else fail "a sealed run does not block the next begin"; fi
+mkdir -p "$WORK/.atomic-cc/runs/nextrun"; echo '{}' > "$WORK/.atomic-cc/runs/nextrun/decision.json"
 if (cd "$WORK" && "$BIN/run-state.sh" seal nextrun complete true >/dev/null 2>&1); then
   pass "the new holder can seal approved=true"; else fail "the new holder can seal approved=true"; fi
 
@@ -212,6 +299,7 @@ OUT=$(stop_hook "$WORK/deep/nested/dir" false)
 # Bound: after 3 blocks the guard stops blocking (it already blocked twice above).
 stop_hook "$WORK" false >/dev/null; OUT=$(stop_hook "$WORK" false)
 [ -z "$OUT" ] && pass "stops blocking after its bound" || fail "stops blocking after its bound" "still blocking"
+mkdir -p "$WORK/.atomic-cc/runs/s1"; echo '{}' > "$WORK/.atomic-cc/runs/s1/decision.json"
 (cd "$WORK" && "$BIN/run-state.sh" seal s1 complete true >/dev/null)
 OUT=$(stop_hook "$WORK" false)
 [ -z "$OUT" ] && pass "never blocks once the run is sealed" || fail "never blocks once the run is sealed"

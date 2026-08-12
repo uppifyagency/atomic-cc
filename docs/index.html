@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>atomic-cc — verified agent workflows in Claude Code</title>
-<meta name="description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and six hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and seven hooks that gate every commit behind deterministic, evidence-backed approval.">
 <link rel="canonical" href="https://atomic-cc.vercel.app/">
 <meta name="author" content="Vlad Vrinceanu">
 <meta name="color-scheme" content="light dark">
@@ -14,16 +14,16 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="atomic-cc">
 <meta property="og:title" content="atomic-cc — verified agent workflows in Claude Code">
-<meta property="og:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and six hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta property="og:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and seven hooks that gate every commit behind deterministic, evidence-backed approval.">
 <meta property="og:url" content="https://atomic-cc.vercel.app/">
 <meta property="og:image" content="https://atomic-cc.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Nine workflows, eleven subagents, twelve slash commands, six hooks.">
+<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Nine workflows, eleven subagents, twelve slash commands, seven hooks.">
 <meta property="og:locale" content="en_GB">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="atomic-cc — verified agent workflows in Claude Code">
-<meta name="twitter:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and six hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="twitter:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and seven hooks that gate every commit behind deterministic, evidence-backed approval.">
 <meta name="twitter:image" content="https://atomic-cc.vercel.app/og.png">
 <meta name="twitter:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code.">
 
@@ -37,7 +37,7 @@
   "@type": "SoftwareSourceCode",
   "name": "atomic-cc",
   "alternateName": "atomic (Claude Code plugin)",
-  "description": "A Claude Code plugin providing nine verification workflows, eleven subagents, twelve slash commands and six hooks. Approval is arithmetic: a deterministic quorum reducer counts reviewer booleans in plain JavaScript, and git commits stay gated until a validated CLI seals that approval. It is discipline for agents, not a sandbox.",
+  "description": "A Claude Code plugin providing nine verification workflows, eleven subagents, twelve slash commands and seven hooks. Approval is arithmetic: a deterministic quorum reducer counts reviewer booleans in plain JavaScript, and git commits stay gated until a validated CLI seals that approval. It is discipline for agents, not a sandbox.",
   "url": "https://atomic-cc.vercel.app/",
   "codeRepository": "https://github.com/uppifyagency/atomic-cc",
   "license": "https://opensource.org/licenses/MIT",
@@ -45,7 +45,7 @@
   "runtimePlatform": "Claude Code",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "macOS, Linux",
-  "softwareVersion": "0.3.0",
+  "softwareVersion": "0.4.0",
   "keywords": "claude code plugin, agentic workflows, ai code review, adversarial verification, deterministic reducer, commit gate",
   "author": {
     "@type": "Person",
@@ -415,7 +415,7 @@ html{scroll-behavior:smooth}
 
 <header class="masthead">
   <div class="shell">
-    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.3.0</span></a>
+    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.4.0</span></a>
     <nav aria-label="Sections">
       <ul>
         <li><a href="#workflows">Workflows</a></li>
@@ -437,7 +437,7 @@ html{scroll-behavior:smooth}
   <div class="shell">
     <p class="eyebrow tag">
       <span>Claude Code plugin</span><span class="sep" aria-hidden="true">/</span>
-      <span>v0.3.0</span><span class="sep" aria-hidden="true">/</span>
+      <span>v0.4.0</span><span class="sep" aria-hidden="true">/</span>
       <span>MIT</span><span class="sep" aria-hidden="true">/</span>
       <span>independent port of Atomic</span>
     </p>
@@ -448,7 +448,7 @@ html{scroll-behavior:smooth}
       atomic-cc is <b>a plugin, and only a plugin</b>. There is no separate CLI to learn, no daemon
       to keep alive, no service to sign up for and no API key of its own. You install it into the
       Claude Code session you already use, and nine workflows, eleven subagents, twelve slash commands
-      and six hooks appear at the prompt.
+      and seven hooks appear at the prompt.
     </p>
 
     <div class="hero-actions">
@@ -460,7 +460,7 @@ html{scroll-behavior:smooth}
       <div><dt>Workflows</dt><dd><span class="n">9<span>slash-invoked</span></span></dd></div>
       <div><dt>Subagents</dt><dd><span class="n">11<span>fresh context</span></span></dd></div>
       <div><dt>Slash commands</dt><dd><span class="n">12<span>human control</span></span></dd></div>
-      <div><dt>Hooks</dt><dd><span class="n">6<span>deterministic guards</span></span></dd></div>
+      <div><dt>Hooks</dt><dd><span class="n">7<span>deterministic guards</span></span></dd></div>
       <div><dt>Requires</dt><dd>Claude&nbsp;Code&nbsp;≥&nbsp;2.1.154, paid plan, <code>jq</code></dd></div>
     </dl>
   </div>
@@ -492,9 +492,9 @@ html{scroll-behavior:smooth}
           <h3>What gets installed</h3>
           <ul>
             <li>Nine workflow scripts, run by Claude Code's workflow runtime</li>
-            <li>Ten subagent definitions, each with its own tool allowlist</li>
+            <li>Eleven subagent definitions, each with its own tool allowlist</li>
             <li>Five skills, exposed as <code>/atomic:*</code> slash commands</li>
-            <li>Four shell hooks wired to <code>PostToolUse</code>, <code>PreToolUse</code>, <code>Stop</code> and <code>SessionStart</code></li>
+            <li>Seven shell hooks wired to <code>PostToolUse</code>, <code>PreToolUse</code> (twice), <code>Stop</code> and <code>SessionStart</code> (three times)</li>
             <li>A per-project <code>.atomic-cc/</code> directory of run state and evidence</li>
           </ul>
         </section>
@@ -641,7 +641,7 @@ html{scroll-behavior:smooth}
           </thead>
           <tbody>
             <tr><td class="mono">worker</td><td>The only agent that writes code in a run. Escalates product, architecture and scope decisions instead of taking them.</td></tr>
-            <tr><td class="mono">verifier</td><td>Derives probes from the literal criteria before reading any receipt, inspects the checkout itself, and reports only evidence-backed findings. Strictly read-only: it cannot update a snapshot, reset the tree, or write the evidence log it is told to trust.</td></tr>
+            <tr><td class="mono">verifier</td><td>Derives probes from the literal criteria before reading any receipt, inspects the checkout itself, and reports only evidence-backed findings. Holds no Edit or Write tool, and is chartered not to update a snapshot, reset the tree, or write the evidence log it is told to trust. It does hold <code>Bash</code>, because verification means running the checks itself — so that charter is discipline, not a permission boundary.</td></tr>
             <tr><td class="mono">scribe</td><td>Transcribes bytes composed in the workflow's JavaScript and runs the run-state CLI verbatim. Chartered to copy, never to author — a malformed artifact is refused, not repaired.</td></tr>
             <tr><td class="mono">debugger</td><td>Reproduce, prove the root cause with file:line evidence, fix minimally, rerun the exact failing scenario.</td></tr>
             <tr><td class="mono">code-simplifier</td><td>Behaviour-preserving cleanup of the diff only; a simplification that breaks a test is reverted, not patched around.</td></tr>
@@ -654,7 +654,7 @@ html{scroll-behavior:smooth}
           </tbody>
         </table>
       </div>
-      <p class="note">Only <code>worker</code>, <code>debugger</code> and <code>code-simplifier</code> can edit files. The six research agents never touch source; <code>codebase-online-researcher</code> may write research notes under <code>.atomic-cc/</code>, and that is all. <code>scribe</code> writes only the exact bytes it is handed. <code>verifier</code> holds no write tool at all — the agent that judges the tree cannot rewrite it.</p>
+      <p class="note">Only <code>worker</code>, <code>debugger</code> and <code>code-simplifier</code> can edit files. The six research agents never touch source; <code>codebase-online-researcher</code> may write research notes under <code>.atomic-cc/</code>, and that is all. <code>scribe</code> writes only the exact bytes it is handed. <code>verifier</code> holds no <code>Edit</code> or <code>Write</code> tool, but it does hold <code>Bash</code> — it has to, to run the tests it is judging. So it <em>could</em> write through a shell; it is told not to, and an independent audit confirmed the tools do permit it. Read that as a charter, not as a cage.</p>
     </div>
   </div>
 </section>
@@ -718,12 +718,12 @@ html{scroll-behavior:smooth}
             <tr><th scope="col">Workflow</th><th scope="col">Approval rule</th><th scope="col">Bound</th></tr>
           </thead>
           <tbody>
-            <tr><td class="mono">goal</td><td>2 of 3 reviewers approve — a fixed quorum over three decorrelated personas; a crashed reviewer becomes a non-approving record and cannot cancel a quorum already reached</td><td>10 turns by default, plus a 3-turn <em>environment</em>-blocker threshold</td></tr>
+            <tr><td class="mono">goal</td><td>2 of 3 reviewers approve — a fixed quorum over three decorrelated personas. A reviewer that <em>dies</em> ends the turn as <code>needs_human</code>: upstream runs reviewers under <code>failFast</code>, and 2-of-3 quietly becoming 2-of-2 is not the gate the caller asked for</td><td>10 turns by default, plus a 3-turn <em>environment</em>-blocker threshold</td></tr>
             <tr><td class="mono">ralph</td><td>Unanimous over exactly 2 reviewer seats</td><td>10 research loops by default; an exhausted budget opens a draft handoff instead of stranding the work</td></tr>
             <tr><td class="mono">adversarial-verification</td><td>Reducer says accept <em>and</em> all verifiers passed</td><td>2 repairs by default, then reject</td></tr>
-            <tr><td class="mono">loop-until-done</td><td>One independent evaluator returns <code>done=true</code> on the evidence — a real gate, but the weakest of the four: no quorum, no adversarial pass</td><td>5 iterations by default; exhaustion is <code>failed</code></td></tr>
+            <tr><td class="mono">loop-until-done</td><td>No gate — an independent evaluator returns <code>done=true</code> on the evidence, which ends the loop but certifies nothing. It sealed <code>approved=true</code> until an audit pointed out that upstream has no approval concept here at all, and one non-quorum judgement was releasing the commit gate</td><td>5 iterations by default; exhaustion is <code>failed</code></td></tr>
             <tr><td class="mono">classify-and-act</td><td>No gate — it routes and acts, it never reviews</td><td>Confidence threshold 0.75; below it, it still acts on the proposed category</td></tr>
-            <tr><td class="mono">tournament</td><td>No gate — a bracket picks the best of N, it checks none of them against criteria</td><td>4 attempts by default, single elimination with per-round byes</td></tr>
+            <tr><td class="mono">tournament</td><td>No gate — a bracket picks the best of N, it checks none of them against criteria. Every exit returns <code>bracket_integrity</code>, because a dead attempt becomes a walkover and a dead judge lets the lower index advance, where upstream would have failed the run</td><td>4 attempts by default, single elimination with per-round byes</td></tr>
             <tr><td class="mono">generate-and-filter</td><td>No gate — a shortlist ranks options</td><td>8 candidates, shortlist of 3, by default</td></tr>
             <tr><td class="mono">fan-out-synthesize</td><td>No gate — an investigation gathers evidence</td><td>4 branches, 4 concurrent, by default</td></tr>
             <tr><td class="mono">open-claude-design</td><td>No gate — an automated critic is not design review; upstream's gate is a human in a live browser</td><td>3 critic refinements by default</td></tr>
@@ -784,8 +784,17 @@ html{scroll-behavior:smooth}
         </figcaption>
       </figure>
 
-      <h3>Six hooks hold the line</h3>
+      <h3>Seven hooks hold the line</h3>
       <div class="ledger">
+        <div class="row">
+          <div class="k">Gate notice<span class="sub">SessionStart · startup</span></div>
+          <div class="d"><p>Prints this session's plugin root and the fact that every
+          <code>/atomic:*</code> workflow must be invoked with it as <code>plugin_root</code>. This
+          exists because an audit found the gate was effectively opt-in: no usage example anywhere
+          passed <code>plugin_root</code>, so a user following the documentation got a run that
+          looked supervised and was not. The workflows now refuse to start without it, and this
+          notice is how the value is always at hand.</p></div>
+        </div>
         <div class="row">
           <div class="k">Evidence logger<span class="sub">PostToolUse · Bash</span></div>
           <div class="d"><p>Every build, test and typecheck command run by <em>any</em> agent is
@@ -927,9 +936,11 @@ claude plugin install atomic@atomic-cc">Copy</button></div>
 <pre><code><span class="k">/atomic:adversarial-verification</span> <span class="p">{</span><span class="s">"run_id"</span>: <span class="s">"av-login-fix-01"</span>,
   <span class="s">"task"</span>: <span class="s">"Fix the login redirect loop"</span>,
   <span class="s">"criteria"</span>: [<span class="s">"/login redirects authenticated users to /dashboard"</span>,
-               <span class="s">"existing auth tests still pass"</span>]<span class="p">}</span>
+               <span class="s">"existing auth tests still pass"</span>],
+  <span class="s">"plugin_root"</span>: <span class="s">"~/.claude/plugins/atomic-cc"</span><span class="p">}</span>
 
-<span class="c">  Implement  · worker writes the fix and a candidate record</span>
+<span class="c">  Implement  · run registered via run-state.sh begin — the gate is live</span>
+<span class="c">             · worker writes the fix and a candidate record</span>
 <span class="c">  Verify     · 3 fresh verifiers rerun the tests themselves</span>
 <span class="c">  Reduce     · 2 of 3 passed → not unanimous → repair</span>
 <span class="c">  Repair     · worker fixes only the blocking findings</span>
@@ -988,7 +999,7 @@ stale run can be released with run-state.sh clear.</code></pre>
       <div class="measure">
         <p>
           A verification tool that oversells itself is worse than none, so: atomic-cc is version
-          <strong>0.3.0</strong>. The convergence rules are ported carefully and the hooks do what
+          <strong>0.4.0</strong>. The convergence rules are ported carefully and the hooks do what
           this page says they do, but the project is new and has not been through many hands.
         </p>
       </div>
@@ -1003,7 +1014,7 @@ stale run can be released with run-state.sh clear.</code></pre>
         <div class="row">
           <div class="k">No workflow has run a real task yet</div>
           <div class="d"><p>The gate, the hooks and the lifecycle are covered by a suite that
-          executes them — 537 assertions, including every workflow driven end to end against mocked
+          executes them — 657 assertions, including every workflow driven end to end against mocked
           agents. Loading was verified against a live session: the plugin registers, the eleven
           agents resolve namespaced, the commit gate denies and then allows. What has
           <em>not</em> happened is a full workflow run against a real task, which costs a lot of
@@ -1033,12 +1044,15 @@ stale run can be released with run-state.sh clear.</code></pre>
           commands are denied with a reason rather than waved through.</p></div>
         </div>
         <div class="row">
-          <div class="k">Only four of the nine runs certify anything</div>
+          <div class="k">Only three of the nine runs certify anything</div>
           <div class="d"><p><code>approval.json</code> is the receipt that says <em>independently
-          reviewed</em>, so only a workflow with a review gate writes one: <code>goal</code> (quorum of
-          2 of 3), <code>ralph</code> (unanimous over 2 seats), <code>adversarial-verification</code>,
-          and <code>loop-until-done</code> — the weakest of the four, one independent evaluator rather
-          than an adversarial quorum. The rest seal <code>complete</code> with
+          reviewed</em>, so only a workflow with a real review gate writes one: <code>goal</code>
+          (quorum of 2 of 3), <code>ralph</code> (unanimous over 2 seats), and
+          <code>adversarial-verification</code> (every verifier passed <em>and</em> the reducer
+          accepted). It was four until v0.4.0: <code>loop-until-done</code> sealed
+          <code>approved=true</code> on one evaluator's word, which upstream has no approval concept
+          for, so a single non-quorum judgement was opening the commit gate. It now seals
+          <code>approved=false</code> like the rest. The other six seal <code>complete</code> with
           <code>approved=false</code>: a judged bracket picks the best of N attempts without checking
           any of them against acceptance criteria, <code>classify-and-act</code> routes and acts but
           never reviews, a shortlist ranks options, an investigation gathers evidence, and a design
@@ -1086,7 +1100,7 @@ stale run can be released with run-state.sh clear.</code></pre>
       <div class="colophon">
         <span>Set in Newsreader &amp; IBM Plex Mono (SIL OFL)</span>
         <span><a href="https://github.com/uppifyagency/atomic-cc">github.com/uppifyagency/atomic-cc</a></span>
-        <span>v0.3.0</span>
+        <span>v0.4.0</span>
       </div>
     </div>
   </div>

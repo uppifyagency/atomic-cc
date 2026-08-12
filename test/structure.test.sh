@@ -88,10 +88,13 @@ for f in "$ROOT"/workflows/*.js; do
   if grep -q 'A\.plugin_root' "$f"; then pass "$n reads plugin_root"
   else fail "$n reads plugin_root"; fi
 done
-# Only a workflow with an independent review gate may mint the approval receipt.
-# goal (quorum of 2), ralph (2 reviewer seats), adversarial-verification (verifier
-# + reducer) and loop-until-done (independent evaluator) review; the rest do not.
-for n in tournament generate-and-filter open-claude-design fan-out-synthesize classify-and-act; do
+# Only a workflow with an independent review gate may mint the approval receipt:
+# goal (quorum of 2 of 3), ralph (2 reviewer seats) and adversarial-verification
+# (unanimous verifiers + reducer). loop-until-done joined this list in 0.4.0
+# (audit finding F8): its evaluator is independent but it is one vote, and
+# upstream has no approval concept for that workflow at all — sealing
+# approved=true there released the commit gate on a non-quorum judgement.
+for n in tournament generate-and-filter open-claude-design fan-out-synthesize classify-and-act loop-until-done; do
   f="$ROOT/workflows/$n.js"
   if grep -qE 'seal \$\{A\.run_id\} [a-z]+ true|sealStage\('"'"'[a-z]+'"'"', true\)' "$f"; then
     fail "$n never seals approved=true (it has no review gate)"
@@ -300,6 +303,85 @@ TEST_COUNT=$(grep -ohE 'tests-[0-9]+%20passing' "$ROOT/README.md" | head -1 | se
 if [ -n "$TEST_COUNT" ] && grep -q "$TEST_COUNT assertions" "$ROOT/README.md"; then
   pass "the test badge and the prose quote the same number ($TEST_COUNT)"
 else fail "the test badge and the prose quote the same number" "badge=$TEST_COUNT"; fi
+
+# ── Audit finding F10: the gate is not optional ──────────────────────────────
+# The gate used to be opt-in on `plugin_root`, and `plugin_root` appeared in no
+# usage example anywhere — so every documented invocation ran with the commit
+# gate, the seal and the Stop guard inert while the docs promised the opposite.
+# These assertions exist so that combination cannot come back: the code must
+# refuse without it, and the docs must never show a call that omits it.
+group "the gate cannot be opted out of (F10)"
+for f in "$ROOT"/workflows/*.js; do
+  n=$(basename "$f")
+  if grep -q 'if (!PLUGIN_ROOT) throw new Error(' "$f"; then pass "$n refuses to run without plugin_root"
+  else fail "$n refuses to run without plugin_root" "no fail-closed guard"; fi
+  # The throw must precede every agent() call, or agents run before the refusal.
+  GUARD=$(grep -n 'if (!PLUGIN_ROOT) throw new Error(' "$f" | head -1 | cut -d: -f1)
+  FIRST_AGENT=$(grep -nE '(^|[^A-Za-z_.])agent\(' "$f" | grep -v 'function\|=>' | head -1 | cut -d: -f1)
+  if [ -n "$GUARD" ] && { [ -z "$FIRST_AGENT" ] || [ "$GUARD" -lt "$FIRST_AGENT" ]; }; then
+    pass "$n refuses before it spawns anything"
+  else fail "$n refuses before it spawns anything" "guard at $GUARD, first agent at $FIRST_AGENT"; fi
+  # No residual "skip the gate" instruction may survive in a prompt: an agent
+  # told it may skip registration is an agent that will.
+  if grep -qi 'plugin_root was not provided\|No plugin_root was provided\|registration skipped\|sealing and mention' "$f"; then
+    fail "$n has no ungated branch left" "still instructs an agent to skip the gate"
+  else pass "$n has no ungated branch left"; fi
+done
+
+group "every documented invocation passes plugin_root (F10)"
+# A usage example that omits plugin_root is now a crash, and before the
+# fail-closed change it was a silently ungated run. Either way it must not ship.
+# HTML wraps every token in a <span>, so the landing page must be de-tagged
+# before matching — without this the check silently found nothing and passed.
+plain() { sed -e 's/<[^>]*>//g' -e 's/&quot;/"/g' -e 's/&#8239;/ /g' "$1" | tr '\n' ' '; }
+for f in "$ROOT/README.md" "$ROOT/docs/index.html" "$ROOT"/commands/*.md; do
+  [ -f "$f" ] || continue
+  n=$(basename "$f")
+  # Lines that invoke a workflow with a JSON object of arguments.
+  BAD=$(plain "$f" | grep -oE '/atomic:[a-z-]+ \{[^}]*\}' | grep -v 'plugin_root' || true)
+  if [ -z "$BAD" ]; then pass "$n: no usage example omits plugin_root"
+  else fail "$n: no usage example omits plugin_root" "$(printf '%s' "$BAD" | head -2 | tr '\n' ' ')"; fi
+done
+# The check above passes trivially on a file with no examples at all, so pin the
+# two files that MUST carry them.
+# README documents the argument contract, so it must show several; the landing
+# page carries one worked run end to end by design.
+for pair in "README.md:3" "docs/index.html:1"; do
+  f="$ROOT/${pair%%:*}"; min="${pair##*:}"
+  [ -f "$f" ] || continue
+  GOOD=$(plain "$f" | grep -oE '/atomic:[a-z-]+ \{[^}]*plugin_root' | wc -l | tr -d ' ')
+  if [ "${GOOD:-0}" -ge "$min" ]; then pass "$(basename "$f") shows $GOOD complete invocations (>= $min)"
+  else fail "$(basename "$f") shows at least $min complete invocations" "found ${GOOD:-0} — the omission check above was vacuous"; fi
+done
+# And the mechanism that supplies it must actually announce itself every session.
+if grep -q 'plugin_root' "$ROOT/bin/gate-notice.sh"; then pass "the SessionStart notice tells the model what to pass"
+else fail "the SessionStart notice tells the model what to pass" "nothing would supply plugin_root"; fi
+if jq -e '.hooks.SessionStart | tostring | contains("gate-notice.sh")' "$ROOT/hooks/hooks.json" >/dev/null 2>&1; then
+  pass "and the notice is wired to SessionStart"
+else fail "and the notice is wired to SessionStart"; fi
+
+# ── Audit finding F11: tournament's divergences must be visible ──────────────
+group "tournament discloses its fallbacks (F11)"
+T="$ROOT/workflows/tournament.js"
+for want in bracket_integrity judge_errors walkovers upstream_divergence matches_decided_by_fallback; do
+  if grep -q "$want" "$T"; then pass "tournament reports $want"
+  else fail "tournament reports $want" "a bracket decided by fallback would look clean"; fi
+done
+if grep -q 'bracket_integrity' "$T" && [ "$(grep -c 'bracket_integrity' "$T")" -ge 2 ]; then
+  pass "both the success and the failure exit disclose bracket integrity"
+else fail "both the success and the failure exit disclose bracket integrity" "only one exit reports it"; fi
+
+# ── Audit finding F13: verification rounds must reach disk ───────────────────
+group "adversarial-verification persists its verifier reports (F13)"
+AV="$ROOT/workflows/adversarial-verification.js"
+if grep -q 'verification-r\${repairs}.json' "$AV"; then pass "each round is written to verification-r<n>.json"
+else fail "each round is written to verification-r<n>.json" "reports would exist only inside the reducer prompt"; fi
+if grep -q 'dead_verifiers' "$AV"; then pass "the round record names the verifiers that returned nothing"
+else fail "the round record names the verifiers that returned nothing"; fi
+# run-state.sh counts verification-*.json as review evidence for an approved
+# seal, so the two must keep spelling it the same way.
+if grep -q 'verification-\*\.json' "$ROOT/bin/run-state.sh"; then pass "run-state.sh accepts that filename as review evidence"
+else fail "run-state.sh accepts that filename as review evidence" "an approved seal would be refused for lack of evidence"; fi
 
 echo
 echo "$PASS passed, $FAIL failed"
