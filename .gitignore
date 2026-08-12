@@ -17,3 +17,5 @@ yarn-error.log*
 # Editors
 .idea/
 *.swp
+.vercel
+.env*
