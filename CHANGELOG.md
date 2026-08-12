@@ -151,7 +151,12 @@ the regression tests that would have caught them.
   gate arithmetic with both reducers executed end to end against mocked agents,
   and structural contracts (manifests, frontmatter, agent references, orphan
   agents, no workflow writing gate files).
-- **CI** (`.github/workflows/ci.yml`) running the suite on every push and PR.
+- **CI** (`.github/workflows/ci.yml`) running the suite on every push and PR,
+  and `test/run-tests.sh` now runs the same shellcheck command locally when the
+  binary is present, so a lint failure costs seconds rather than a push. It
+  caught two unreachable `case` patterns in the evidence logger on its first run:
+  `*"go test"*` swallowed `*"cargo test"*`, and `*"npm test"*` swallowed
+  `*"pnpm test"*`.
 - Structural tests that count the tree and compare it against every documented
   inventory (README prose, the landing page's specsheet tiles and headings, the
   marketplace description, the test badge). The stale counts they caught on the

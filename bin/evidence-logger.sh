@@ -10,13 +10,16 @@ IN=$(cat) || exit 0
 CMD=$(printf '%s' "$IN" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 [ -n "$CMD" ] || exit 0
 
+# Order matters: a longer runner name must come first or it is unreachable.
+# "cargo test" contains "go test", and "pnpm test" contains "npm test", so the
+# shorter pattern would swallow both and mislabel nothing but still hide intent.
 case "$CMD" in
-  *pytest*|*vitest*|*jest*|*"go test"*|*"cargo test"*|*"npm test"*|*"npm run test"*|*"pnpm test"*|*"yarn test"*|*phpunit*)
-    KIND=test ;;
-  *tsc*|*typecheck*|*"mypy"*|*"pyright"*)
-    KIND=typecheck ;;
+  *pytest*|*vitest*|*jest*|*"cargo test"*|*"go test"*|*"pnpm test"*|*"npm run test"*|*"npm test"*|*"yarn test"*|*phpunit*)
+    KIND="test" ;;
+  *tsc*|*typecheck*|*mypy*|*pyright*)
+    KIND="typecheck" ;;
   *"npm run build"*|*"pnpm build"*|*"yarn build"*|*"cargo build"*|*"go build"*|*"make build"*|*compile*)
-    KIND=build ;;
+    KIND="build" ;;
   *)
     exit 0 ;;
 esac

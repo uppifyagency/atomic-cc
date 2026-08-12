@@ -26,5 +26,22 @@ echo "### run lifecycle (every workflow registers, seals, and certifies honestly
 node "$ROOT/test/lifecycle.test.mjs" || STATUS=1
 
 echo
+echo "### shellcheck (the same command CI runs)"
+# CI lints at --severity=warning and fails the build on a hit, so run it here too
+# when it is installed: a warning found locally costs seconds, one found in CI
+# costs a push. Absent shellcheck this is a skip, not a failure — it is not a
+# runtime dependency of the plugin.
+if command -v shellcheck >/dev/null 2>&1; then
+  if shellcheck --severity=warning "$ROOT"/bin/*.sh "$ROOT"/test/*.sh; then
+    echo "  ok   shellcheck --severity=warning is clean"
+  else
+    echo "  FAIL shellcheck --severity=warning reported findings"
+    STATUS=1
+  fi
+else
+  echo "  skip shellcheck is not installed (CI will still run it)"
+fi
+
+echo
 if [ "$STATUS" -eq 0 ]; then echo "ALL SUITES PASSED"; else echo "SOME SUITES FAILED"; fi
 exit "$STATUS"
