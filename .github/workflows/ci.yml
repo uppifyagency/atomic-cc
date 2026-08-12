@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # The plugin's value is a deterministic gate, so the gate's contract tests
+    # are the build: hook payloads, run-state lifecycle, and both reducers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Identify git for the lifecycle tests
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          git config --global init.defaultBranch main
+
+      - name: Run the test suite
+        run: bash test/run-tests.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint the hook scripts
+        # The hooks run on every tool call, so warnings here are cheap to fix and
+        # expensive to ship. Informational notices are not failures.
+        run: shellcheck --severity=warning bin/*.sh test/*.sh

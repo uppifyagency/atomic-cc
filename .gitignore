@@ -1,6 +1,11 @@
 # atomic-cc run state (run-state.json, evidence logs, receipts, ledgers)
 .atomic-cc/
 
+# Internal porting reference (Italian, ~30KB): the upstream inventory this port
+# was built from. Useful locally, but it is not part of the distributed plugin.
+Atomic-CC-Bastani-SourceGold.md
+scratchpad/
+
 # macOS
 .DS_Store
 

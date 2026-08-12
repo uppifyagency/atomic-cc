@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>atomic-cc — verified agent workflows in Claude Code</title>
-<meta name="description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), ten subagents and four hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and six hooks that gate every commit behind deterministic, evidence-backed approval.">
 <link rel="canonical" href="https://atomic-cc.vercel.app/">
 <meta name="author" content="Vlad Vrinceanu">
 <meta name="color-scheme" content="light dark">
@@ -14,16 +14,16 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="atomic-cc">
 <meta property="og:title" content="atomic-cc — verified agent workflows in Claude Code">
-<meta property="og:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), ten subagents and four hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta property="og:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and six hooks that gate every commit behind deterministic, evidence-backed approval.">
 <meta property="og:url" content="https://atomic-cc.vercel.app/">
 <meta property="og:image" content="https://atomic-cc.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Nine workflows, ten subagents, five slash commands, four hooks.">
+<meta property="og:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code. Nine workflows, eleven subagents, twelve slash commands, six hooks.">
 <meta property="og:locale" content="en_GB">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="atomic-cc — verified agent workflows in Claude Code">
-<meta name="twitter:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), ten subagents and four hooks that gate every commit behind deterministic, evidence-backed approval.">
+<meta name="twitter:description" content="A Claude Code plugin: nine verification workflows (all of Atomic's builtins), eleven subagents and six hooks that gate every commit behind deterministic, evidence-backed approval.">
 <meta name="twitter:image" content="https://atomic-cc.vercel.app/og.png">
 <meta name="twitter:image:alt" content="atomic-cc: a verification harness that lives inside Claude Code.">
 
@@ -37,7 +37,7 @@
   "@type": "SoftwareSourceCode",
   "name": "atomic-cc",
   "alternateName": "atomic (Claude Code plugin)",
-  "description": "A Claude Code plugin providing nine verification workflows, ten subagents, five slash commands and four hooks. Approval is decided by a deterministic quorum reducer outside the model, and git commits are gated until that approval is sealed.",
+  "description": "A Claude Code plugin providing nine verification workflows, eleven subagents, twelve slash commands and six hooks. Approval is arithmetic: a deterministic quorum reducer counts reviewer booleans in plain JavaScript, and git commits stay gated until a validated CLI seals that approval. It is discipline for agents, not a sandbox.",
   "url": "https://atomic-cc.vercel.app/",
   "codeRepository": "https://github.com/uppifyagency/atomic-cc",
   "license": "https://opensource.org/licenses/MIT",
@@ -45,7 +45,7 @@
   "runtimePlatform": "Claude Code",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "macOS, Linux",
-  "softwareVersion": "0.2.0",
+  "softwareVersion": "0.3.0",
   "keywords": "claude code plugin, agentic workflows, ai code review, adversarial verification, deterministic reducer, commit gate",
   "author": {
     "@type": "Person",
@@ -415,7 +415,7 @@ html{scroll-behavior:smooth}
 
 <header class="masthead">
   <div class="shell">
-    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.2.0</span></a>
+    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true"></span>atomic-cc<span class="v">0.3.0</span></a>
     <nav aria-label="Sections">
       <ul>
         <li><a href="#workflows">Workflows</a></li>
@@ -437,7 +437,7 @@ html{scroll-behavior:smooth}
   <div class="shell">
     <p class="eyebrow tag">
       <span>Claude Code plugin</span><span class="sep" aria-hidden="true">/</span>
-      <span>v0.2.0</span><span class="sep" aria-hidden="true">/</span>
+      <span>v0.3.0</span><span class="sep" aria-hidden="true">/</span>
       <span>MIT</span><span class="sep" aria-hidden="true">/</span>
       <span>independent port of Atomic</span>
     </p>
@@ -447,8 +447,8 @@ html{scroll-behavior:smooth}
     <p class="lede">
       atomic-cc is <b>a plugin, and only a plugin</b>. There is no separate CLI to learn, no daemon
       to keep alive, no service to sign up for and no API key of its own. You install it into the
-      Claude Code session you already use, and nine workflows, ten subagents, five slash commands
-      and four hooks appear at the prompt.
+      Claude Code session you already use, and nine workflows, eleven subagents, twelve slash commands
+      and six hooks appear at the prompt.
     </p>
 
     <div class="hero-actions">
@@ -457,10 +457,10 @@ html{scroll-behavior:smooth}
     </div>
 
     <dl class="specsheet">
-      <div><dt>Workflows</dt><dd><span class="n">4<span>slash-invoked</span></span></dd></div>
-      <div><dt>Subagents</dt><dd><span class="n">10<span>fresh context</span></span></dd></div>
-      <div><dt>Slash commands</dt><dd><span class="n">4<span>human control</span></span></dd></div>
-      <div><dt>Hooks</dt><dd><span class="n">3<span>outside the model</span></span></dd></div>
+      <div><dt>Workflows</dt><dd><span class="n">9<span>slash-invoked</span></span></dd></div>
+      <div><dt>Subagents</dt><dd><span class="n">11<span>fresh context</span></span></dd></div>
+      <div><dt>Slash commands</dt><dd><span class="n">12<span>human control</span></span></dd></div>
+      <div><dt>Hooks</dt><dd><span class="n">6<span>deterministic guards</span></span></dd></div>
       <div><dt>Requires</dt><dd>Claude&nbsp;Code&nbsp;≥&nbsp;2.1.154, paid plan, <code>jq</code></dd></div>
     </dl>
   </div>
@@ -532,21 +532,27 @@ html{scroll-behavior:smooth}
           <div class="d">
             <p>A bounded implementation loop. Each turn a worker implements against acceptance
             criteria that are restated verbatim and never reinterpreted, then three independent
-            reviewers inspect the real checkout delta in fresh context. Two approvals finish the
-            run. The same blocking finding surviving three consecutive turns marks the run
-            <code>blocked</code> instead of looping forever. Terminal states are
-            <code>complete</code>, <code>blocked</code> or <code>needs_human</code>; a pull request
-            is optional.</p>
+            reviewers — completion, evidence and risk, on decorrelated models — inspect the real
+            checkout delta in fresh context. Two approvals finish the run. A code finding never
+            aborts the loop, however stubborn: the anti-loop fires only when the same
+            <em>environment</em> blocker (a missing dependency, a broken tool) survives three
+            consecutive turns, which is the difference between a run that spends the budget it was
+            given and one that gives up at turn three. Terminal states are <code>complete</code>,
+            <code>blocked</code> or <code>needs_human</code>; a pull request is optional.</p>
           </div>
         </div>
         <div class="row">
           <div class="k">/atomic:ralph<span class="sub">unanimous</span></div>
           <div class="d">
-            <p>The full pipeline for a rough prompt: refine it into a spec with testable acceptance
-            criteria, run three researchers in parallel over the codebase and the documentation,
-            implement, then hold a review gate that needs <em>every</em> reviewer to approve. Failed
-            gates produce a bounded repair loop that is handed only the blocking findings, so the
-            scope cannot drift.</p>
+            <p>A bounded <em>research</em> loop for a rough prompt. Every iteration refines the
+            research question, runs three researchers in parallel (locator, analyzer, online),
+            implements, and holds a gate that needs <em>every</em> reviewer to approve — so a run
+            whose reviewers discover the approach itself was wrong can change course, instead of
+            patching symptoms against a brief written once at the start. The acceptance criteria are
+            yours: they are injected verbatim into every stage, and the refinement stage's schema
+            has exactly one field, leaving nowhere to write criteria of its own. If the budget runs
+            out unapproved, it opens a <em>draft</em> pull request carrying every unresolved blocking
+            finding rather than leaving the work stranded.</p>
           </div>
         </div>
         <div class="row">
@@ -573,9 +579,12 @@ html{scroll-behavior:smooth}
           <div class="k">/atomic:classify-and-act<span class="sub">deterministic route</span></div>
           <div class="d">
             <p>A classifier assigns the request a category with a confidence score; the route is
-            decided in code against a threshold, not by the model. Below the threshold the run
-            records <code>needs_human</code> instead of guessing — upstream's mid-run human gate
-            has no Claude Code equivalent, so the decision is persisted rather than paused on.</p>
+            decided in code against a threshold, not by the model. Below the threshold it still
+            <em>acts</em>, falling back deterministically to the proposed category and recording
+            <code>fallback_used</code> — as upstream does. Upstream's mid-run human gate has no
+            Claude Code equivalent, and a router that answers "ask a human" and does nothing is a
+            router that does nothing. It routes and acts; it never reviews, so it certifies
+            nothing.</p>
           </div>
         </div>
         <div class="row">
@@ -605,20 +614,25 @@ html{scroll-behavior:smooth}
           </div>
         </div>
         <div class="row">
-          <div class="k">/atomic:open-claude-design<span class="sub">headless</span></div>
+          <div class="k">/atomic:open-claude-design<span class="sub">partly original</span></div>
           <div class="d">
             <p>Design brief, online reference discovery, a self-contained HTML preview, then a
             bounded loop of fresh-context critics whose blocking findings must be repaired before
-            export. Upstream's live playwright preview with a human feedback gate cannot run
-            inside a workflow, so this is upstream's own headless variant.</p>
+            export. <strong>The critic loop is original work, not a port.</strong> Upstream requires
+            a real browser and a human annotating a live preview, and exits early without one; a
+            model critiquing a sibling model's HTML is a weaker signal, and the exported spec says
+            so on its face.</p>
           </div>
         </div>
       </div>
 
-      <h3>Ten subagents</h3>
+      <h3>Eleven subagents</h3>
       <p class="measure">
-        Nine are ported from Atomic; the tenth, <code>verifier</code>, exists because Claude Code
-        needs a named agent type where Atomic runs verification as a fresh-context workflow stage.
+        Nine are ported from Atomic. Two exist because of Claude Code: <code>verifier</code>, because
+        CC needs a named agent type where Atomic runs verification as a fresh-context workflow stage,
+        and <code>scribe</code>, because workflow scripts have no filesystem access — audit artifacts
+        are composed as exact bytes in JavaScript and handed to an agent chartered to transcribe them
+        and never author.
       </p>
       <div class="scroller">
         <table>
@@ -627,7 +641,8 @@ html{scroll-behavior:smooth}
           </thead>
           <tbody>
             <tr><td class="mono">worker</td><td>The only agent that writes code in a run. Escalates product, architecture and scope decisions instead of taking them.</td></tr>
-            <tr><td class="mono">verifier</td><td>Derives probes from the literal criteria before reading any receipt, inspects the checkout itself, and reports only evidence-backed findings.</td></tr>
+            <tr><td class="mono">verifier</td><td>Derives probes from the literal criteria before reading any receipt, inspects the checkout itself, and reports only evidence-backed findings. Strictly read-only: it cannot update a snapshot, reset the tree, or write the evidence log it is told to trust.</td></tr>
+            <tr><td class="mono">scribe</td><td>Transcribes bytes composed in the workflow's JavaScript and runs the run-state CLI verbatim. Chartered to copy, never to author — a malformed artifact is refused, not repaired.</td></tr>
             <tr><td class="mono">debugger</td><td>Reproduce, prove the root cause with file:line evidence, fix minimally, rerun the exact failing scenario.</td></tr>
             <tr><td class="mono">code-simplifier</td><td>Behaviour-preserving cleanup of the diff only; a simplification that breaks a test is reverted, not patched around.</td></tr>
             <tr><td class="mono">codebase-locator</td><td>Finds where things live. Read-only reconnaissance, no analysis.</td></tr>
@@ -639,7 +654,7 @@ html{scroll-behavior:smooth}
           </tbody>
         </table>
       </div>
-      <p class="note">Only <code>worker</code>, <code>debugger</code> and <code>code-simplifier</code> can edit files. The six research agents never touch source; <code>codebase-online-researcher</code> may write research notes under <code>.atomic-cc/</code>, and that is all.</p>
+      <p class="note">Only <code>worker</code>, <code>debugger</code> and <code>code-simplifier</code> can edit files. The six research agents never touch source; <code>codebase-online-researcher</code> may write research notes under <code>.atomic-cc/</code>, and that is all. <code>scribe</code> writes only the exact bytes it is handed. <code>verifier</code> holds no write tool at all — the agent that judges the tree cannot rewrite it.</p>
     </div>
   </div>
 </section>
@@ -649,7 +664,7 @@ html{scroll-behavior:smooth}
   <div class="shell">
     <div class="clause-mark"><span class="num">§&#8239;03</span><span class="lbl">Deterministic<br>convergence</span></div>
     <div>
-      <h2>The decision to approve is arithmetic, and it happens outside the model.</h2>
+      <h2>The decision to approve is arithmetic. The state it writes is validated by a CLI, not authored by an agent.</h2>
       <div class="measure">
         <p>
           Asking a model whether its own work is good enough is not verification. atomic-cc's
@@ -690,16 +705,28 @@ html{scroll-behavior:smooth}
       <blockquote class="pull">A model can reason badly. What it cannot do is turn bad reasoning into an unverified commit.</blockquote>
 
       <h3>Quorum by workflow</h3>
+      <p class="measure">
+        Four of the nine workflows have a review gate, and only those four can write
+        <code>approval.json</code> — the receipt that says <em>independently reviewed</em>. The other
+        five finish and seal <code>approved=false</code>: they route, rank, investigate or judge
+        style, none of which is a review against acceptance criteria. Quorums are module constants,
+        not inputs. Nothing a caller passes and no rigor profile can reduce a gate to one reviewer.
+      </p>
       <div class="scroller">
         <table>
           <thead>
             <tr><th scope="col">Workflow</th><th scope="col">Approval rule</th><th scope="col">Bound</th></tr>
           </thead>
           <tbody>
-            <tr><td class="mono">goal</td><td>2 of 3 reviewers approve (configurable, 1–5 reviewers)</td><td>10 turns by default, plus a 3-turn blocker threshold</td></tr>
-            <tr><td class="mono">ralph</td><td>Unanimous: every reviewer must approve</td><td>10 repair loops by default</td></tr>
+            <tr><td class="mono">goal</td><td>2 of 3 reviewers approve — a fixed quorum over three decorrelated personas; a crashed reviewer becomes a non-approving record and cannot cancel a quorum already reached</td><td>10 turns by default, plus a 3-turn <em>environment</em>-blocker threshold</td></tr>
+            <tr><td class="mono">ralph</td><td>Unanimous over exactly 2 reviewer seats</td><td>10 research loops by default; an exhausted budget opens a draft handoff instead of stranding the work</td></tr>
             <tr><td class="mono">adversarial-verification</td><td>Reducer says accept <em>and</em> all verifiers passed</td><td>2 repairs by default, then reject</td></tr>
-            <tr><td class="mono">fan-out-synthesize</td><td>No gate — a research workflow</td><td>4 branches, 4 concurrent, by default</td></tr>
+            <tr><td class="mono">loop-until-done</td><td>One independent evaluator returns <code>done=true</code> on the evidence — a real gate, but the weakest of the four: no quorum, no adversarial pass</td><td>5 iterations by default; exhaustion is <code>failed</code></td></tr>
+            <tr><td class="mono">classify-and-act</td><td>No gate — it routes and acts, it never reviews</td><td>Confidence threshold 0.75; below it, it still acts on the proposed category</td></tr>
+            <tr><td class="mono">tournament</td><td>No gate — a bracket picks the best of N, it checks none of them against criteria</td><td>4 attempts by default, single elimination with per-round byes</td></tr>
+            <tr><td class="mono">generate-and-filter</td><td>No gate — a shortlist ranks options</td><td>8 candidates, shortlist of 3, by default</td></tr>
+            <tr><td class="mono">fan-out-synthesize</td><td>No gate — an investigation gathers evidence</td><td>4 branches, 4 concurrent, by default</td></tr>
+            <tr><td class="mono">open-claude-design</td><td>No gate — an automated critic is not design review; upstream's gate is a human in a live browser</td><td>3 critic refinements by default</td></tr>
           </tbody>
         </table>
       </div>
@@ -757,7 +784,7 @@ html{scroll-behavior:smooth}
         </figcaption>
       </figure>
 
-      <h3>Four hooks hold the line</h3>
+      <h3>Six hooks hold the line</h3>
       <div class="ledger">
         <div class="row">
           <div class="k">Evidence logger<span class="sub">PostToolUse · Bash</span></div>
@@ -768,16 +795,36 @@ html{scroll-behavior:smooth}
         </div>
         <div class="row">
           <div class="k">Approval gate<span class="sub">PreToolUse · Bash</span></div>
-          <div class="d"><p>While a run is active and unapproved, <code>git commit</code> and
-          <code>git push</code> are denied — including the wrapped forms agents reach for, such as
-          <code>cd&nbsp;pkg&nbsp;&amp;&amp;&nbsp;git&nbsp;commit</code> or
-          <code>git&nbsp;-C&nbsp;dir&nbsp;push</code>. With no active run it never interferes.</p></div>
+          <div class="d"><p>While a run is <code>in_progress</code> and unapproved, commit-shaped
+          commands are denied: <code>git commit/push/am/cherry-pick/update-ref</code>,
+          <code>gh&nbsp;pr&nbsp;create/merge</code>, <code>jj&nbsp;commit</code>, and the wrapped
+          forms agents reach for — <code>cd&nbsp;pkg&nbsp;&amp;&amp;&nbsp;git&nbsp;commit</code>,
+          <code>git&nbsp;-C&nbsp;dir&nbsp;push</code>, <code>timeout</code>/<code>nohup</code>
+          wrappers. It also denies shell tampering with the gate's own state files. With no active
+          run, and once a run is sealed, it never interferes.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Tamper guard<span class="sub">PreToolUse · Write|Edit</span></div>
+          <div class="d"><p><code>Write</code> and <code>Edit</code> on
+          <code>run-state.json</code>, <code>approval.json</code> or the evidence log are denied
+          unconditionally, active run or not. Those files belong to
+          <code>bin/run-state.sh</code>, which validates every transition — so an agent can
+          <em>invoke</em> the approval but cannot author the token the gate reads.</p></div>
         </div>
         <div class="row">
           <div class="k">Stop guard<span class="sub">Stop</span></div>
           <div class="d"><p>A turn cannot end quietly while <code>run-state.json</code> still says
           <code>in_progress</code>: the run has to be driven to a terminal state first. Bounded to
-          three blocks per run, so it can never trap a session.</p></div>
+          three blocks per run, and the counter resets when the run seals, so it can never trap a
+          session. It cannot see an interrupt — Esc, <code>/clear</code>, a crash — which is what
+          <code>bin/run-state.sh clear</code> is for.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Rigor notice<span class="sub">SessionStart · startup</span></div>
+          <div class="d"><p>Injects this project's rigor profile into the session, so the assistant
+          invoking a workflow actually sees the budgets it is supposed to pass.
+          <code>/atomic:rigor</code> is not a config file nobody reads. Profiles scale effort only:
+          none of them can shrink a review gate.</p></div>
         </div>
         <div class="row">
           <div class="k">Upstream watch<span class="sub">SessionStart · startup</span></div>
@@ -785,12 +832,15 @@ html{scroll-behavior:smooth}
           <code>bastani-inc/atomic</code> against the commit recorded in
           <code>upstream.lock</code>. On drift it asks the session to suggest
           <code>/atomic:sync-upstream</code>, which reviews the upstream changes and updates the
-          port. Fails open: no network, no git, no lock file — no noise.</p></div>
+          port. Fails open, stamps its throttle in your user cache rather than in your projects, and
+          goes quiet entirely under <code>ATOMIC_OFFLINE=1</code>.</p></div>
         </div>
       </div>
       <p class="note warn"><span class="tag">Honest caveat</span>The enforcement hooks need <code>jq</code>
-      on <code>PATH</code> and fail open without it — no <code>jq</code>, no gate. It is a declared
-      trade-off, not an accident, and it is why <code>jq</code> is listed as a prerequisite.</p>
+      on <code>PATH</code>. Without it they fail <em>safe</em>, not open: commit-shaped commands are
+      denied with an explanatory reason and gate-file writes stay denied. The evidence logger and the
+      upstream watch do switch themselves off — and a missing evidence log reads to a verifier as
+      "unverified", never as "clean".</p>
     </div>
   </div>
 </section>
@@ -834,12 +884,15 @@ claude plugin install atomic@atomic-cc">Copy</button></div>
       <ul class="measure">
         <li><strong>Claude Code 2.1.154 or newer</strong> — earlier versions have no dynamic workflows.</li>
         <li><strong>A paid plan.</strong> On Pro, enable workflows in <code>/config</code>.</li>
-        <li><strong><code>jq</code> on <code>PATH</code></strong>, or the hooks silently disable themselves.</li>
+        <li><strong><code>jq</code> on <code>PATH</code></strong>. Without it the two gates fail
+        <em>safe</em>, not open — commit-shaped commands are denied with a reason, gate-file writes
+        stay denied — while the evidence logger and the upstream watch switch themselves off.</li>
+        <li><strong><code>node</code></strong> to run the test suite. Not needed at runtime.</li>
         <li><strong>Budget for real agents.</strong> An <code>adversarial-verification</code> run at
         standard rigor costs roughly 4–12 agent invocations.</li>
       </ul>
 
-      <h3>Five slash commands for the human</h3>
+      <h3>Twelve slash commands for the human</h3>
       <div class="scroller">
         <table>
           <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
@@ -847,14 +900,17 @@ claude plugin install atomic@atomic-cc">Copy</button></div>
             <tr><td class="mono">/atomic:status</td><td>Reads the run state: receipts, ledger, blockers, approval, and a summary of the evidence log.</td></tr>
             <tr><td class="mono">/atomic:approve</td><td>The human override. Seals approval and opens the commit gate — and states plainly when it is overriding an unconverged verification.</td></tr>
             <tr><td class="mono">/atomic:resume</td><td>Cross-session re-entry, reconstructed from the persisted receipts, ledger and last decision.</td></tr>
-            <tr><td class="mono">/atomic:rigor</td><td>Sets the effort profile: lean (1 verifier, 1 repair), standard (3, 2) or thorough (5, 4).</td></tr>
-            <tr><td class="mono">/atomic:sync-upstream</td><td>Reviews upstream Atomic commits since the SHA in <code>upstream.lock</code>, applies port-relevant changes, bumps the version and rewrites the lock.</td></tr>
+            <tr><td class="mono">/atomic:rigor</td><td>Sets this project's effort profile — lean (5 turns, 1 verifier, 1 repair), standard (10, 3, 2) or thorough (20, 5, 4) — and a SessionStart hook injects it so the budgets are actually seen. Effort only: no profile can shrink a review gate.</td></tr>
+            <tr><td class="mono">/atomic:sync-upstream</td><td>Reviews upstream Atomic commits since the SHA in <code>upstream.lock</code>, applies port-relevant changes, bumps the version and rewrites the lock. Treats everything it fetches as untrusted data and may not touch <code>bin/</code>, <code>hooks/</code> or any tool grant.</td></tr>
+            <tr><td class="mono" colspan="2">The seven prompt-template commands — <code>/atomic:parallel-review</code>, <code>/atomic:review-loop</code>, <code>/atomic:parallel-research</code>, <code>/atomic:parallel-cleanup</code>, <code>/atomic:parallel-context-build</code>, <code>/atomic:parallel-handoff-plan</code>, <code>/atomic:gather-context-and-clarify</code> — port Atomic's <code>prompts/</code> layer. This is where the research and cleanup subagents earn their keep: without it, five agents ship that no workflow can reach.</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="note">The first four are marked <code>disable-model-invocation</code>: Claude cannot
-      call them on its own — approving a run stays a human act. <code>sync-upstream</code> is the
-      exception, so the session can act on the upstream watch's drift notice.</p>
+      <p class="note">All five skills are marked <code>disable-model-invocation</code>: Claude cannot
+      call them on its own — approving a run stays a human act, and
+      <code>sync-upstream</code> is included deliberately. It was the only model-invocable skill with
+      write access to the gate scripts <em>and</em> network fetch, which is the shortest path to
+      rewriting the gate. The upstream watch prints a notice; acting on it is yours.</p>
     </div>
   </div>
 </section>
@@ -890,9 +946,10 @@ claude plugin install atomic@atomic-cc">Copy</button></div>
         <div class="code-head"><span>PreToolUse · deny</span></div>
 <pre><code><span class="c">agent attempted →</span> git commit -m <span class="s">"fix login redirect"</span>
 
-<span class="p">atomic-cc:</span> run "av-login-fix-01" is not approved yet - the
-deterministic reducer (or /atomic:approve) must seal
-approval.json first. Check /atomic:status.</code></pre>
+<span class="p">atomic-cc:</span> run 'av-login-fix-01' is in_progress and not
+approved - the deterministic reducer (or /atomic:approve) must
+seal approval via run-state.sh first. Check /atomic:status; a
+stale run can be released with run-state.sh clear.</code></pre>
       </div>
 
       <p class="measure">
@@ -904,13 +961,17 @@ approval.json first. Check /atomic:status.</code></pre>
       <div class="code">
         <div class="code-head"><span>.atomic-cc/</span></div>
 <pre><code>.atomic-cc/
-├── run-state.json            <span class="c"># active run + status</span>
+├── run-state.json            <span class="c"># written ONLY by bin/run-state.sh</span>
+├── config.json               <span class="c"># rigor profile (bin/rigor.sh)</span>
 ├── evidence/&lt;session&gt;.jsonl  <span class="c"># real command logs, from the hook</span>
 └── runs/&lt;run_id&gt;/
-    ├── receipt-*.json        <span class="c"># worker receipts</span>
-    ├── ledger.jsonl          <span class="c"># goal-workflow ledger</span>
-    ├── decision.json         <span class="c"># last reducer decision, if unconverged</span>
-    └── approval.json         <span class="c"># written ONLY on approval</span></code></pre>
+    ├── goal-ledger.json      <span class="c"># receipts, reviews, blockers, decisions</span>
+    ├── turn-N/ | iter-N/     <span class="c"># per-round artifacts</span>
+    │   ├── orchestrator-receipt.md
+    │   ├── review-&lt;reviewer&gt;.json    <span class="c"># one per reviewer, every round</span>
+    │   └── review-round-latest.json  <span class="c"># + consolidated_findings</span>
+    ├── decision.json         <span class="c"># terminal decision + escalation</span>
+    └── approval.json         <span class="c"># written ONLY by run-state.sh</span></code></pre>
       </div>
       <p class="note">Add <code>.atomic-cc/</code> to your <code>.gitignore</code> unless you want the
       run history committed.</p>
@@ -927,7 +988,7 @@ approval.json first. Check /atomic:status.</code></pre>
       <div class="measure">
         <p>
           A verification tool that oversells itself is worse than none, so: atomic-cc is version
-          <strong>0.2.0</strong>. The convergence rules are ported carefully and the hooks do what
+          <strong>0.3.0</strong>. The convergence rules are ported carefully and the hooks do what
           this page says they do, but the project is new and has not been through many hands.
         </p>
       </div>
@@ -940,10 +1001,13 @@ approval.json first. Check /atomic:status.</code></pre>
           is made.</p></div>
         </div>
         <div class="row">
-          <div class="k">Two things to confirm on your first run</div>
-          <div class="d"><p>Whether <code>agentType</code> wants the namespaced name
-          (<code>atomic:verifier</code>) or the bare one — the runtime error lists what it accepts —
-          and whether your plan exposes dynamic workflows at all.</p></div>
+          <div class="k">No workflow has run a real task yet</div>
+          <div class="d"><p>The gate, the hooks and the lifecycle are covered by a suite that
+          executes them — 537 assertions, including every workflow driven end to end against mocked
+          agents. Loading was verified against a live session: the plugin registers, the eleven
+          agents resolve namespaced, the commit gate denies and then allows. What has
+          <em>not</em> happened is a full workflow run against a real task, which costs a lot of
+          agents. Treat the workflows as tested code that is not yet field-worn.</p></div>
         </div>
         <div class="row">
           <div class="k">Deliberate gaps against upstream Atomic</div>
@@ -952,13 +1016,34 @@ approval.json first. Check /atomic:status.</code></pre>
           <code>/atomic:resume</code> and the persisted artifacts. No mid-run human prompts — use
           <code>/atomic:approve</code> and split the work into phases. Atomic's file-based
           <code>ctx.task</code> plumbing is emulated by having agents read and write project files
-          under <code>.atomic-cc/</code>.</p></div>
+          under <code>.atomic-cc/</code>. No <code>git_worktree_dir</code>, so an autonomous run
+          mutates your checkout in place — run it on a branch. Upstream decorrelates reviewers across
+          vendors; Claude Code can only vary opus/sonnet/haiku plus charters, so correlated blind
+          spots stay likelier here. <code>open-claude-design</code>'s critic loop is original work,
+          not a port: upstream gates that workflow on a human annotating a live browser
+          preview.</p></div>
         </div>
         <div class="row">
           <div class="k">The gate is not a sandbox</div>
-          <div class="d"><p>It denies <code>git commit</code> and <code>git push</code> from the Bash
-          tool while a run is unapproved. It is a discipline for agents, not a security boundary
-          against a determined one, and it fails open without <code>jq</code>.</p></div>
+          <div class="d"><p>It denies commit-shaped commands from the Bash tool while a run is
+          <code>in_progress</code> and unapproved, and it denies any write to its own state files
+          outside <code>bin/run-state.sh</code>. It is discipline for agents, not a security boundary
+          against a determined one: a shell matcher does not see <code>eval</code>, an alias, or an
+          MCP git integration. Without <code>jq</code> the gates fail <em>safe</em> — commit-shaped
+          commands are denied with a reason rather than waved through.</p></div>
+        </div>
+        <div class="row">
+          <div class="k">Only four of the nine runs certify anything</div>
+          <div class="d"><p><code>approval.json</code> is the receipt that says <em>independently
+          reviewed</em>, so only a workflow with a review gate writes one: <code>goal</code> (quorum of
+          2 of 3), <code>ralph</code> (unanimous over 2 seats), <code>adversarial-verification</code>,
+          and <code>loop-until-done</code> — the weakest of the four, one independent evaluator rather
+          than an adversarial quorum. The rest seal <code>complete</code> with
+          <code>approved=false</code>: a judged bracket picks the best of N attempts without checking
+          any of them against acceptance criteria, <code>classify-and-act</code> routes and acts but
+          never reviews, a shortlist ranks options, an investigation gathers evidence, and a design
+          critic is not a human in a browser. All nine still register with the gate, because all nine
+          drive write-capable agents.</p></div>
         </div>
         <div class="row">
           <div class="k">Verification is not free</div>
@@ -1001,7 +1086,7 @@ approval.json first. Check /atomic:status.</code></pre>
       <div class="colophon">
         <span>Set in Newsreader &amp; IBM Plex Mono (SIL OFL)</span>
         <span><a href="https://github.com/uppifyagency/atomic-cc">github.com/uppifyagency/atomic-cc</a></span>
-        <span>v0.2.0</span>
+        <span>v0.3.0</span>
       </div>
     </div>
   </div>

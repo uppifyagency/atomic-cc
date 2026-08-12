@@ -1,25 +1,49 @@
 export const meta = {
   name: 'open-claude-design',
-  description: 'Design discovery → reference import → self-contained HTML preview → bounded critic refinement → rich HTML spec export (headless port of Atomic openClaudeDesign)',
+  description: 'Design discovery → reference import → self-contained HTML preview → bounded critic refinement → rich HTML spec export. Design-phase structure follows Atomic openClaudeDesign; the critic refinement loop is an ORIGINAL substitute for upstream\'s interactive browser QA, which is not portable to Claude Code.',
   phases: [
-    { title: 'Discovery', detail: 'expand the prompt into a structured design brief' },
-    { title: 'References', detail: 'research 3-5 real-world reference designs (optional)' },
-    { title: 'Preview', detail: 'generate a self-contained single-file HTML preview' },
-    { title: 'Refine', detail: 'bounded critic loop: findings applied to the preview' },
-    { title: 'Export', detail: 'derive a rich HTML handoff spec from the final preview' },
+    { title: 'Discovery', detail: 'expand the prompt into a structured design brief (port)' },
+    { title: 'References', detail: 'research 3-5 real-world reference designs, optional (port)' },
+    { title: 'Preview', detail: 'generate a self-contained single-file HTML preview (port)' },
+    { title: 'Refine', detail: 'bounded critic loop — ORIGINAL, replaces upstream live user QA' },
+    { title: 'Export', detail: 'derive a rich HTML handoff spec from the final preview (port)' },
   ],
 }
 
 // args: { run_id, prompt, discover_references = true, max_refinements = 3 }
-// HEADLESS adaptation of upstream open-claude-design: upstream runs a live HTML
-// preview loop with a playwright-driven browser and a human-feedback long-poll
-// gate between refinement rounds. In HEADLESS MODE upstream SKIPS that human
-// feedback gate — this port implements exactly that variant, because Claude
-// Code workflows cannot prompt the user mid-run. The human gate is replaced by
-// a fresh schema-validated critic per round with a deterministic exit gate in
-// JS; when the refinement budget is exhausted with blocking findings, the run
-// still completes but surfaces approved_for_export: false (upstream surfaces
-// the flag rather than failing).
+//
+// PROVENANCE — read this before calling it a port.
+//
+// Upstream openClaudeDesign is browser-centric and human-in-the-loop: it
+// requires the playwright-cli skill's browser, drives `/skill:impeccable live`
+// against a served preview, and gates each refinement round on REAL user
+// annotations captured in the browser. When that browser is unavailable,
+// upstream's runner EXITS EARLY and generates no design at all rather than
+// producing "artifacts no one can review interactively"
+// (open-claude-design-runner.ts, open-claude-design-utils.ts).
+//
+// Claude Code workflows have neither playwright-cli nor a mid-run user prompt,
+// so upstream's reviewable-preview path cannot be reproduced here. What this
+// file ports faithfully:
+//   - the phase structure (discovery brief → reference import → preview →
+//     refinement → spec export) and its artifact set;
+//   - upstream's headless degradation rules for the brief: infer the most
+//     defensible brief/register from the prompt and repository, and record
+//     explicit "Gaps / Assumptions" rather than blocking;
+//   - the self-contained single-file preview and rich spec-export contracts.
+// What is ORIGINAL work in this file, not a port:
+//   - the bounded critic loop below (fresh schema-validated critic per round,
+//     deterministic exit gate in JS). Upstream has no such loop: its
+//     equivalent gate is a human looking at a live browser. A model critiquing
+//     a sibling model's HTML is a weaker signal than a user's annotations, and
+//     `approved_for_export` reflects only that critic's judgement.
+// Following upstream's own refusal to ship unreviewable design artifacts, the
+// exported spec is labelled as machine-reviewed-only, and the return value says
+// so, so no caller mistakes it for user-approved design.
+//
+// This workflow writes only under .atomic-cc/runs/<run_id>/ and never mutates
+// the user's source tree, so it deliberately does NOT register run state:
+// gating commits for a run that writes no code would block unrelated work.
 // Slash-command invocation delivers everything after the command name as a
 // STRING, so accept a JSON string (optionally followed by prose) too.
 function atomicArgs(raw) {
@@ -40,6 +64,29 @@ if (!/^[A-Za-z0-9._-]{1,64}$/.test(A.run_id))
 if (!A.prompt) throw new Error('atomic: prompt required')
 const DISCOVER_REFERENCES = A.discover_references !== false            // Atomic default true
 const MAX_REFINEMENTS = Math.min(Math.max(A.max_refinements ?? 3, 0), 5) // Atomic default 3, clamp 0-5
+// The preview/refine/export stages are told to write only under
+// .atomic-cc/runs/<run_id>/, but they run as atomic:worker (Edit/Write/Bash), so
+// that confinement is a prompt, not a permission. The run registers with the
+// commit gate anyway — while it is in_progress a stray commit is denied — and
+// seals a terminal status before returning. `approved` is always false: this
+// design was machine-reviewed only and never authorizes a commit.
+// Gate transitions go only through the plugin CLI; direct writes to
+// run-state.json / approval.json are denied by the tamper-guard hook.
+const PLUGIN_ROOT = typeof A.plugin_root === 'string' ? A.plugin_root.trim() : ''
+const runStateCmd = (sub) => PLUGIN_ROOT ? `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}` : null
+// Issued by the scribe (transcribe-and-run, never author), so no write-capable
+// agent is handed the gate.
+async function runState(sub, label) {
+  const cmd = runStateCmd(sub)
+  if (!cmd) { log(`atomic open-claude-design: no plugin_root — gate registration skipped (${sub})`); return }
+  await agent(
+    `Run the following command EXACTLY as written, once, and report its output verbatim.
+Write no files and modify nothing.
+
+--- RUN COMMAND (verbatim) ---
+${cmd}`,
+    { agentType: 'atomic:scribe', label })
+}
 const DIR = `.atomic-cc/runs/${A.run_id}`
 const BRIEF = `${DIR}/design-brief.md`
 const REFS = `${DIR}/references.md`
@@ -48,13 +95,16 @@ const SPEC = `${DIR}/design-spec.html`
 
 const BRIEF_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['audience', 'goals', 'constraints', 'style_direction', 'sections'],
+  required: ['audience', 'goals', 'constraints', 'style_direction', 'sections', 'gaps_and_assumptions'],
   properties: {
     audience: { type: 'string' },
     goals: { type: 'array', minItems: 1, items: { type: 'string' } },
     constraints: { type: 'array', items: { type: 'string' } },
     style_direction: { type: 'string' },
     sections: { type: 'array', minItems: 1, items: { type: 'string' } },
+    // Upstream's headless rule: infer the most defensible brief, but record
+    // explicit gaps/assumptions instead of blocking on a question nobody can answer.
+    gaps_and_assumptions: { type: 'array', items: { type: 'string' } },
   },
 }
 const CRITIC_SCHEMA = {
@@ -74,24 +124,45 @@ const CRITIC_SCHEMA = {
 }
 
 phase('Discovery')
+// Registered before any stage that can write, so the gate covers the whole run.
+await runState(`begin ${A.run_id}`, 'gate:begin')
 const brief = await agent(
   `Design discovery for atomic open-claude-design run "${A.run_id}".
 Expand this design prompt into a structured design brief: ${A.prompt}
 Identify the audience, concrete goals, hard constraints, a style direction
 (tone, layout language, color/typography direction), and the ordered list of
 sections/screens the design needs. Be specific enough that a builder could
-implement the design without asking questions.`,
+implement the design without asking questions.
+This run is non-interactive: nobody will answer a question mid-run. Infer the
+most defensible brief and register from the prompt and the repository, and record
+every inference you had to make in "gaps_and_assumptions" rather than blocking.`,
   { schema: BRIEF_SCHEMA, label: 'discovery' })
 if (!brief) throw new Error('atomic open-claude-design: discovery stage returned null')
 
+// The brief file's bytes are composed here so the artifact cannot drift from the
+// structured brief the later stages are judged against.
+const briefMarkdown = [
+  `# Design brief — ${A.run_id}`,
+  '', `Prompt: ${A.prompt}`,
+  '', '## Audience', brief.audience,
+  '', '## Goals', ...brief.goals.map(g => `- ${g}`),
+  '', '## Constraints', ...(brief.constraints.length ? brief.constraints.map(c => `- ${c}`) : ['- (none stated)']),
+  '', '## Style direction', brief.style_direction,
+  '', '## Sections (in order)', ...brief.sections.map((s, i) => `${i + 1}. ${s}`),
+  '', '## Gaps / Assumptions',
+  ...((brief.gaps_and_assumptions ?? []).length
+    ? brief.gaps_and_assumptions.map(g => `- ${g}`)
+    : ['- The discovery stage recorded no gaps or assumptions.']),
+  '', '## Structured brief (verbatim)', '```json', JSON.stringify(brief, null, 2), '```', '',
+].join('\n')
+
 await agent(
-  `Atomic open-claude-design run "${A.run_id}": persist the design brief.
-Write EXACTLY this path and no other file (create directories as needed): ${BRIEF}
-Render this structured brief as readable markdown (headings for audience, goals,
-constraints, style direction, sections), preserving every field verbatim:
-${JSON.stringify(brief, null, 2)}
-Return a one-line confirmation.`,
-  { agentType: 'atomic:worker', label: 'brief:write' })
+  `Transcribe the following artifact exactly as given (byte-for-byte, create directories as needed). Do not author, reformat, or annotate content.
+
+--- WRITE FILE: ${BRIEF} ---
+${briefMarkdown}
+--- END FILE ---`,
+  { agentType: 'atomic:scribe', label: 'brief:write' })
 
 let referencesPath = null
 if (DISCOVER_REFERENCES) {
@@ -126,8 +197,10 @@ Write it to EXACTLY this path and no other file: ${PREVIEW}
 Return a one-line summary of what the preview contains.`,
   { agentType: 'atomic:worker', label: 'preview' })
 
-// Headless refinement loop: fresh critic each round, deterministic gate in JS
-// (upstream's human feedback long-poll gate is skipped in headless mode).
+// ORIGINAL (not a port): fresh critic each round with a deterministic exit gate
+// in JS. Upstream's equivalent gate is a human annotating a live browser
+// preview; a model critiquing a sibling model's HTML is a weaker signal, and
+// approved_for_export means only "this critic approved".
 let refinements = 0
 let approvedForExport = false
 let lastCritique = null
@@ -150,7 +223,6 @@ or "minor" (polish). Findings must be specific and actionable.`,
     break
   }
   if (refinements >= MAX_REFINEMENTS) {
-    // Budget exhausted with blockers: upstream surfaces the flag rather than failing.
     log(`atomic open-claude-design: refinement budget exhausted with ${blocking.length} blocking finding(s) — exporting with approved_for_export=false`)
     break
   }
@@ -181,16 +253,32 @@ The spec must document, derived from the final preview (not from assumptions):
 - the design tokens actually used: colors, typography, spacing,
 - the preview itself, embedded (e.g. in an iframe via relative src "preview.html"
   or inlined) so the spec stands alone as a handoff document.
-${approvedForExport ? '' : `State prominently near the top that the design was NOT approved by the critic
+State prominently near the top of the spec, in both cases, that this design was
+reviewed only by an automated critic and NOT by a human in a browser — no
+interactive design QA took place in this run, so visual and interaction quality
+are unverified by a person.
+${approvedForExport ? '' : `Also state prominently that the automated critic did NOT approve the design
 (approved_for_export=false) and list the outstanding findings: ${JSON.stringify(lastCritique?.findings ?? [], null, 2)}`}
 Return a one-line confirmation.`,
   { agentType: 'atomic:worker', label: 'export' })
+
+// approved=false unconditionally: approved_for_export is one automated critic's
+// opinion on its sibling's HTML, not the review gate, and no human saw the
+// preview in a browser. It must never authorize a commit.
+await runState(`seal ${A.run_id} complete false`, 'gate:seal')
 
 return {
   status: 'complete',
   preview_path: PREVIEW,
   spec_path: SPEC,
   approved_for_export: approvedForExport,
+  // Named so no caller mistakes an automated critic's approval for design
+  // review: upstream's gate is a human in a real browser, which this run had not.
+  reviewed_by: 'automated critic only (no human browser QA; upstream openClaudeDesign requires one)',
+  human_reviewed: false,
   refinements_completed: refinements,
+  max_refinements: MAX_REFINEMENTS,
+  outstanding_findings: approvedForExport ? [] : (lastCritique?.findings ?? []),
   references_path: referencesPath,
+  brief_path: BRIEF,
 }

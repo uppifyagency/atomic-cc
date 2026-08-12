@@ -9,7 +9,7 @@ export const meta = {
   ],
 }
 
-// args: { run_id, task, verifier_count = 3, max_repairs = 2 }
+// args: { run_id, task, verifier_count = 3, max_repairs = 2, plugin_root? }
 // Faithful to Atomic adversarial-verification-runner.ts: a lean pass/fail
 // verifier contract + a fresh-context LLM reducer, with a DETERMINISTIC override
 // that only lets "accept" stand when ALL verifiers unanimously passed.
@@ -34,7 +34,12 @@ if (!/^[A-Za-z0-9._-]{1,64}$/.test(A.run_id))
 if (!A.task) throw new Error('atomic: task required')
 const N = Math.min(Math.max(A.verifier_count ?? 3, 1), 5)   // Atomic default 3
 const MAX_REPAIRS = Math.min(Math.max(A.max_repairs ?? 2, 0), 5) // Atomic default 2
-const CAND = `.atomic-cc/runs/${A.run_id}/candidate.md`
+const RUN_DIR = `.atomic-cc/runs/${A.run_id}`
+const CAND = `${RUN_DIR}/candidate.md`
+// Gate-state transitions go only through the plugin CLI; direct writes to
+// run-state.json / approval.json are denied by the tamper-guard hook.
+const PLUGIN_ROOT = typeof A.plugin_root === 'string' ? A.plugin_root.trim() : ''
+const runStateCmd = (sub) => PLUGIN_ROOT ? `"${PLUGIN_ROOT}/bin/run-state.sh" ${sub}` : null
 // User-supplied criteria (CC extension over upstream, which has task-only input):
 // folded verbatim into the verification rubric so they gate exactly like the
 // built-in checks. Kept immutable for the whole run.
@@ -68,10 +73,14 @@ const REDUCER_SCHEMA = {
 }
 
 phase('Implement')
+const BEGIN_CMD = runStateCmd(`begin ${A.run_id}`)
 await agent(
   `You are the implementation worker for atomic run "${A.run_id}".
-1. First: write .atomic-cc/run-state.json with {"active_run": "${A.run_id}", "status": "in_progress"}
-   (create directories as needed).
+1. ${BEGIN_CMD
+    ? `First action: register the run with the commit gate by running exactly:
+   ${BEGIN_CMD}
+   Never Write or Edit .atomic-cc/run-state.json or approval.json directly — a hook denies it, and the CLI is the only channel.`
+    : 'plugin_root was not provided, so skip gate registration entirely (do NOT create .atomic-cc/run-state.json) and note "run-state registration skipped (no plugin_root)" in the candidate.'}
 2. Implement this task, strictly in scope: ${A.task}
 3. Validate your own change narrowly (run the relevant build/tests).
 4. Write the CANDIDATE artifact to ${CAND}: a self-contained record of what you produced —
@@ -137,15 +146,26 @@ Do NOT git commit or push.`,
 
 const approved = decision.decision === 'accept'
 const status = approved ? 'complete' : 'rejected'
+
+// Seal deterministically: the decision JSON is composed HERE and transcribed
+// verbatim by the scribe, and the state transition is the CLI's job. No agent
+// authors the gate token.
+const SEAL_CMD = runStateCmd(`seal ${A.run_id} ${status} ${approved}`)
+const decisionJson = JSON.stringify({
+  run_id: A.run_id, status, approved,
+  repairs_completed: repairs, max_repairs: MAX_REPAIRS,
+  candidate_path: CAND, rubric: RUBRIC, decision,
+}, null, 2)
 await agent(
-  `Atomic run "${A.run_id}" finished: decision "${decision.decision}", approved=${approved}.
-1. Update .atomic-cc/run-state.json to {"active_run": "${A.run_id}", "status": "${status}"}.
-${approved
-    ? `2. Write {"approved": true, "human": false, "run_id": "${A.run_id}"} to
-   .atomic-cc/runs/${A.run_id}/approval.json (this unlocks the commit gate).`
-    : `2. Do NOT write any approval.json. Write the decision to
-   .atomic-cc/runs/${A.run_id}/decision.json: ${JSON.stringify(decision)}`}`,
-  { agentType: 'atomic:worker', label: 'seal' })
+  `Transcribe the following artifact exactly as given (byte-for-byte, create directories as needed)${SEAL_CMD ? ' and then run the command exactly as written' : ''}. Do not author, reformat, or annotate content.
+
+--- WRITE FILE: ${RUN_DIR}/decision.json ---
+${decisionJson}
+--- END FILE ---${SEAL_CMD ? `
+
+--- RUN COMMAND (verbatim) ---
+${SEAL_CMD}` : ''}`,
+  { agentType: 'atomic:scribe', label: 'seal' })
 
 return { status, approved, repairs_completed: repairs, candidate_path: CAND,
          remaining_work: approved ? [] : decision.remaining_work, decision }

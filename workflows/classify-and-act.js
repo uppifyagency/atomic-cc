@@ -1,14 +1,16 @@
 export const meta = {
   name: 'classify-and-act',
-  description: 'Schema-validated classification → deterministic confidence route → scoped action worker (port of Atomic classify-and-act)',
+  description: 'Schema-validated classification → deterministic confidence route with deterministic headless fallback → scoped action worker (port of Atomic classify-and-act)',
   phases: [
     { title: 'Classify', detail: 'schema-validated agent assigns a category with confidence' },
-    { title: 'Route', detail: 'deterministic threshold gate: act, or stop for human review' },
-    { title: 'Act', detail: 'isolated worker executes the prompt scoped to the category' },
+    { title: 'Route', detail: 'deterministic threshold gate; low confidence falls back deterministically, never stops' },
+    { title: 'Act', detail: 'isolated worker executes the prompt scoped to the selected category' },
+    { title: 'Seal', detail: 'terminal run-state seal via the plugin CLI' },
   ],
 }
 
-// args: { run_id, prompt, categories = ["analysis","implementation","research"], confidence_threshold = 0.75 }
+// args: { run_id, prompt, categories = ["analysis","implementation","research"],
+//         confidence_threshold = 0.75, plugin_root }
 // Slash-command invocation delivers everything after the command name as a
 // STRING, so accept a JSON string (optionally followed by prose) too.
 function atomicArgs(raw) {
@@ -31,23 +33,49 @@ const CATEGORIES = Array.isArray(A.categories) && A.categories.length
   ? A.categories.slice(0, 8).map(String)                                   // Atomic bounds: 1-8 categories
   : ['analysis', 'implementation', 'research']                             // Atomic defaults
 const THRESHOLD = Math.min(Math.max(A.confidence_threshold ?? 0.75, 0.5), 0.99) // Atomic default 0.75
-const CLASS_PATH = `.atomic-cc/runs/${A.run_id}/classification.json`
-const ACTION_PATH = `.atomic-cc/runs/${A.run_id}/action.md`
+const PLUGIN_ROOT = typeof A.plugin_root === 'string' && A.plugin_root.trim()
+  ? A.plugin_root.trim() : null
+const DIR = `.atomic-cc/runs/${A.run_id}`
+const CLASS_PATH = `${DIR}/classification.json`
 
-// Discipline each builtin category imposes on the action worker; custom
-// categories fall back to acting in the spirit of the label.
-const DISCIPLINES = {
-  analysis: 'READ-ONLY analysis: inspect the codebase/materials, do NOT modify any project file. Your only write is the findings artifact below (file:line evidence, no speculation).',
-  implementation: 'Implementation: make the minimal in-scope code changes, validate them narrowly (build/tests relevant to what you touched), and record what changed + evidence in the notes artifact below.',
-  research: 'Research: gather and evaluate information relevant to the prompt, cite sources/evidence, and write the research artifact below. Do NOT modify project code.',
+// Upstream safeName(): category → filesystem-safe artifact suffix.
+function safeName(value) {
+  const normalized = String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return normalized || 'fallback'
+}
+
+// This workflow's action stage may mutate the repository (implementation/fix/code
+// categories), so the run is registered with the approval gate via the plugin CLI.
+const BEGIN = PLUGIN_ROOT
+  ? `FIRST, before any other action, run this exact shell command to register the run with the approval gate:
+"${PLUGIN_ROOT}/bin/run-state.sh" begin ${A.run_id}
+Never Write/Edit .atomic-cc/run-state.json or approval.json directly — a hook denies those writes; the CLI is the only channel.`
+  : `No plugin_root was provided: SKIP run-state registration entirely (do NOT create .atomic-cc/run-state.json), and mention "run-state registration skipped (no plugin_root)" in your report.`
+
+async function sealStage(status, approved) {
+  if (!PLUGIN_ROOT) {
+    log(`atomic classify-and-act: no plugin_root — run-state seal (${status}) skipped`)
+    return
+  }
+  await agent(
+    `Atomic run "${A.run_id}" ended: status "${status}", approved=${approved}.
+Run this exact shell command and do nothing else:
+"${PLUGIN_ROOT}/bin/run-state.sh" seal ${A.run_id} ${status} ${approved}
+Never Write/Edit .atomic-cc/run-state.json or approval.json directly — the CLI is the only channel.`,
+    { agentType: 'atomic:scribe', label: `seal-${status}` })
 }
 
 phase('Classify')
+// Upstream classifier runs with tools: [] (pure structured classification).
+// CC adaptation: per-stage tool restriction is unavailable; the prompt scopes it.
 const cls = await agent(
-  `Classify this prompt into EXACTLY ONE of these categories: ${JSON.stringify(CATEGORIES)}
-Prompt: ${A.prompt}
-Return the single best-fit category, your confidence (0 to 1, calibrated — do not inflate),
-and a short rationale grounded in the prompt's actual wording.`,
+  `Categories:
+${CATEGORIES.map(c => `- ${c}`).join('\n')}
+You route a task to exactly one declared action category. Do not use any tools; classify from the task text alone.
+Success criteria: the selected category is copied verbatim from the list and supported by the task's concrete wording.
+Decision rules: choose exactly one listed category. Use low confidence when the task is ambiguous or spans categories. Stop after making that single classification.
+Return only the structured result requested by the schema: category, confidence (0 to 1, calibrated), and a concise evidence-based rationale in complete sentences.
+Classify this task: ${A.prompt}`,
   { schema: { type: 'object', additionalProperties: false,
       required: ['category', 'confidence', 'rationale'],
       properties: {
@@ -55,52 +83,89 @@ and a short rationale grounded in the prompt's actual wording.`,
         confidence: { type: 'number', minimum: 0, maximum: 1 },
         rationale: { type: 'string' },
       } },
-    label: 'classify' })
-if (!cls) throw new Error('atomic classify-and-act: classification stage returned null')
+    label: 'classifier' })
 
-// Deterministic route (in JS, not by the model). A category outside the
-// allowed list is treated as low confidence, never trusted.
-const validCategory = CATEGORIES.includes(cls.category)
-const confidence = Math.min(Math.max(cls.confidence, 0), 1)
-const proceed = validCategory && confidence >= THRESHOLD
-const status = proceed ? 'complete' : 'needs_human'
-const record = { run_id: A.run_id, status, category: cls.category, confidence,
-                 rationale: cls.rationale, threshold: THRESHOLD, categories: CATEGORIES,
-                 category_valid: validCategory }
+// Ported 1:1 from upstream classify-and-act-runner.ts: a missing/invalid structured
+// classification is NOT fatal — it degrades to proposed="", confidence=0, which the
+// deterministic fallback below resolves. The workflow ALWAYS proceeds to act.
+const v = (cls && typeof cls === 'object') ? cls : {}
+const proposedCategory = 'category' in v ? String(v.category) : ''
+const rawConfidence = 'confidence' in v ? v.confidence : 0
+const confidence = (typeof rawConfidence === 'number' && Number.isFinite(rawConfidence))
+  ? Math.max(0, Math.min(1, rawConfidence)) : 0
+const rationale = 'rationale' in v ? String(v.rationale)
+  : 'Classifier did not provide a usable structured rationale.'
+const exactCategory = CATEGORIES.find(c => c === proposedCategory)
+const needsFallback = exactCategory === undefined || confidence < THRESHOLD
+// CC adaptation: upstream first tries an interactive human selection (ctx.ui.select)
+// and falls back deterministically when the run is headless. Claude Code workflows
+// cannot prompt the user mid-run, so we always take upstream's deterministic branch:
+// the exact proposed category when it is listed, else the first configured category.
+const category = needsFallback ? (exactCategory ?? CATEGORIES[0]) : exactCategory
+const fallbackMode = needsFallback ? 'deterministic' : 'none'
+const ACTION_PATH = `${DIR}/action-${safeName(category)}.md`
 
 phase('Route')
-log(`classify-and-act: category="${cls.category}" confidence=${confidence} threshold=${THRESHOLD} -> ${status}`)
+log(`classify-and-act: proposed="${proposedCategory}" confidence=${confidence} threshold=${THRESHOLD} -> selected="${category}" (fallback=${needsFallback ? fallbackMode : 'none'})`)
+const record = {
+  proposed_category: proposedCategory,
+  selected_category: category,
+  confidence,
+  threshold: THRESHOLD,
+  rationale,
+  fallback_used: needsFallback,
+  fallback_mode: fallbackMode,
+}
 await agent(
-  `Atomic run "${A.run_id}": persist the classification decision.
-Write EXACTLY this JSON to ${CLASS_PATH} (create directories as needed), and no other file:
+  `Atomic run "${A.run_id}": transcribe the classification decision.
+Write EXACTLY this JSON to ${CLASS_PATH} (create parent directories as needed) and touch no other file:
 ${JSON.stringify(record, null, 2)}
 Do NOT git commit or push.`,
-  { agentType: 'atomic:worker', label: 'record-classification' })
+  { agentType: 'atomic:scribe', label: 'record-classification' })
 
-if (!proceed) {
-  // ADAPTATION vs upstream: Atomic pauses here on a human selection gate when
-  // confidence is below threshold. Claude Code workflows cannot prompt the user
-  // mid-run, so we persist status "needs_human" and stop; the human re-runs
-  // with a sharper prompt/categories or acts on the classification manually.
-  return { status: 'needs_human', category: cls.category, confidence,
-           classification_path: CLASS_PATH, action_path: null,
-           rationale: cls.rationale }
-}
+// Upstream scopes the action stage's TOOLS per category (actionTools): categories
+// containing implement/fix/code get read+edit+write+bash; research gets read+web;
+// everything else is read-only. CC adaptation: tools cannot be restricted per stage,
+// so the same scoping is imposed as a hard prompt discipline on the worker.
+const normalized = category.toLowerCase()
+const writeCapable = normalized.includes('implement') || normalized.includes('fix') || normalized.includes('code')
+const discipline = writeCapable
+  ? 'Discipline: implementation — make the minimal in-scope changes (Read/Edit/Write/Bash) and validate them narrowly (build/tests relevant to what you touched).'
+  : normalized.includes('research')
+    ? 'Discipline: research — read, search, and evaluate information only. Do NOT modify any project file; your only write is the report artifact below.'
+    : 'Discipline: read-only — inspect the codebase/materials only. Do NOT modify any project file; your only write is the report artifact below.'
 
 phase('Act')
 const action = await agent(
-  `You are the action worker for atomic run "${A.run_id}".
-The prompt was classified as "${cls.category}" (confidence ${confidence}).
-Discipline for this category: ${DISCIPLINES[cls.category] ??
-    `Act strictly in the spirit of the category "${cls.category}"; stay in scope for that discipline.`}
-Original prompt to execute: ${A.prompt}
-Write your artifact to EXACTLY this path and no other extra file: ${ACTION_PATH}
-(what you did, evidence — commands run + observed output — and file:line references).
-Do NOT git commit or push: commits are gated until the run is approved.
-Return a compact summary of what you produced.`,
-  { agentType: 'atomic:worker', label: `act:${cls.category.slice(0, 30)}` })
-if (!action) throw new Error('atomic classify-and-act: action stage returned null')
+  `${BEGIN}
 
-return { status: 'complete', category: cls.category, confidence,
-         classification_path: CLASS_PATH, action_path: ACTION_PATH,
-         result: String(action).slice(0, 2000) }
+You are the isolated action agent for category "${category}" in atomic run "${A.run_id}".
+Evidence: read the classification artifact at ${CLASS_PATH}. Use only relevant evidence available to this stage; do not assume access to the classifier's conversation context.
+${discipline}
+Success criteria: complete the requested action for this category, distinguish verified facts from assumptions, and report concrete evidence, validation, and remaining risks.
+Stop when the category-specific action is complete or a remaining blocker is stated with its missing evidence.
+Write your report to EXACTLY this path and no other extra file: ${ACTION_PATH}
+Markdown with Outcome, Evidence, Validation, and Remaining risks headings. Lead with the outcome; report only work you can point to evidence for, and say so explicitly when something is unverified.
+Do NOT git commit or push: commits are gated until the run is approved.
+Return a compact summary of what you produced.
+
+Objective: ${A.prompt}`,
+  { agentType: 'atomic:worker', label: `action-${safeName(category)}` })
+if (!action) {
+  await sealStage('failed', false)
+  throw new Error('atomic classify-and-act: action stage returned null')
+}
+
+phase('Seal')
+// approved=false: this workflow is a router (classify → act) and has no review
+// stage, so there is nothing to base an approval on. Sealing approved=true here
+// would mint the "independently reviewed" receipt (.atomic-cc/runs/<id>/
+// approval.json) for work no verifier ever read. The action completed; a human
+// who wants the receipt runs /atomic:approve, or routes the work through
+// /atomic:goal or /atomic:adversarial-verification, which do review it.
+await sealStage('complete', false)
+
+return { status: 'complete', result: String(action).slice(0, 2000),
+         category, confidence, proposed_category: proposedCategory,
+         fallback_used: needsFallback, rationale,
+         classification_path: CLASS_PATH, action_path: ACTION_PATH, artifact_dir: DIR }

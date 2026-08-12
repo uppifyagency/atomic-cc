@@ -1,7 +1,7 @@
 {
   "upstream": "bastani-inc/atomic",
   "sha": "9c8b6d8fbefcff3408255ca60b890048da5f0184",
-  "synced_at": "2026-08-11",
+  "synced_at": "2026-08-12",
   "upstream_release": "0.9.13-alpha.1",
-  "notes": "Parity baseline: all 9 upstream builtin workflows ported (goal, ralph, adversarial-verification, fan-out-and-synthesize, classify-and-act, generate-and-filter, tournament, loop-until-done, open-claude-design headless). Runtime-level features (sessions, compaction, intercom, TUI, providers) are provided by Claude Code itself — see README."
+  "notes": "Fidelity pass against this SHA (v0.3.0): reviewed goal*/ralph*/review-convergence/shared-prompts/fan-out-and-synthesize/open-claude-design sources line by line and closed the divergences \u2014 run lifecycle sealed on every path via bin/run-state.sh, blocked triggered only by repeated environment blockers, crashed reviewers synthesized instead of discarded, ralph's research loop and immutable user criteria restored, unapproved draft handoff restored, prompts/ layer ported as commands/, upstream reviewer personas and agent charters ported. Runtime-level features (sessions, compaction, intercom, TUI, providers) are provided by Claude Code itself \u2014 see README."
 }
